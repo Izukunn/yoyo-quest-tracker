@@ -1,327 +1,295 @@
-/* ===================================================
-   YoYo Quest Tracker & Combo Master — style.css
-   Custom animations, glassmorphism, neon UI effects
-   =================================================== */
+/* ============================================================
+   YoYo Quest Tracker & Combo Master — Custom Styles
+   Supplement to Tailwind CSS (animations, glassmorphism,
+   neon accents, and state-driven card styles).
+============================================================ */
 
-/* ---- Base font smoothing ---- */
-body {
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+/* ── CSS Variables ─────────────────────────────────────── */
+:root {
+  --neon-violet: #8B5CF6;
+  --neon-emerald: #10B981;
+  --neon-violet-dim: rgba(139, 92, 246, 0.15);
+  --neon-emerald-dim: rgba(16, 185, 129, 0.15);
+  --glass-bg: rgba(24, 24, 27, 0.7);        /* zinc-900/70 */
+  --glass-border: rgba(63, 63, 70, 0.6);    /* zinc-700/60 */
+  --card-locked-bg: rgba(17, 17, 20, 0.9);
+  --card-unlocked-bg: rgba(26, 20, 44, 0.85);
+  --card-mastered-bg: rgba(13, 36, 28, 0.85);
 }
 
-/* ---- Glassmorphism card ---- */
-.glass-card {
-  background: rgba(30, 27, 75, 0.45);
-  border: 1px solid rgba(139, 92, 246, 0.18);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+/* ── Smooth scroll ─────────────────────────────────────── */
+html { scroll-behavior: smooth; }
+
+/* ── Glassmorphism panel ───────────────────────────────── */
+.glass-panel {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
-/* ---- Stat pill chip ---- */
-.stat-pill {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  background: rgba(15, 23, 42, 0.7);
-  border: 1px solid rgba(139, 92, 246, 0.2);
+/* ── Stat cards inside profile panel ──────────────────── */
+.stat-card {
+  background: rgba(39, 39, 42, 0.8);
+  border: 1px solid rgba(63, 63, 70, 0.5);
   border-radius: 0.75rem;
-  padding: 0.5rem 1.1rem;
+  padding: 0.6rem 1.1rem;
   min-width: 72px;
+  text-align: center;
 }
 .stat-label {
   font-size: 0.65rem;
-  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #94a3b8;
+  color: #a1a1aa;  /* zinc-400 */
 }
 .stat-value {
-  font-size: 1.35rem;
+  font-size: 1.5rem;
   font-weight: 800;
   line-height: 1.2;
 }
 
-/* ---- Navigation buttons ---- */
-.nav-btn {
+/* ── Tab button styles ─────────────────────────────────── */
+.tab-btn {
+  color: #a1a1aa;
   background: transparent;
-  color: #94a3b8;
   border: 1px solid transparent;
-  cursor: pointer;
 }
-.nav-btn:hover {
+.tab-btn:hover {
+  color: #f4f4f5;
+  background: rgba(63, 63, 70, 0.4);
+}
+.tab-btn.active-tab {
+  color: var(--neon-violet);
   background: rgba(139, 92, 246, 0.12);
-  color: #a78bfa;
-  border-color: rgba(139, 92, 246, 0.25);
-}
-.nav-btn.active-nav {
-  background: rgba(139, 92, 246, 0.2);
-  color: #a78bfa;
-  border-color: rgba(139, 92, 246, 0.4);
+  border-color: rgba(139, 92, 246, 0.3);
 }
 
-/* ---- Primary button (violet neon) ---- */
+/* ── Primary / Emerald buttons ─────────────────────────── */
 .btn-primary {
-  background: linear-gradient(135deg, #7C3AED 0%, #8B5CF6 100%);
+  background: linear-gradient(135deg, var(--neon-violet), #6D28D9);
   color: #fff;
+  padding: 0.55rem 1.3rem;
+  border-radius: 0.6rem;
+  font-size: 0.9rem;
+  font-weight: 600;
   border: none;
   cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
-  box-shadow: 0 0 18px rgba(139, 92, 246, 0.35);
+  transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+  box-shadow: 0 0 14px rgba(139, 92, 246, 0.35);
 }
 .btn-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 0 28px rgba(139, 92, 246, 0.55);
+  opacity: 0.9;
+  transform: translateY(-1px);
+  box-shadow: 0 0 22px rgba(139, 92, 246, 0.55);
 }
-.btn-primary:active {
-  transform: translateY(0);
+.btn-primary:active { transform: translateY(0); }
+
+.btn-emerald {
+  background: linear-gradient(135deg, var(--neon-emerald), #059669);
+  color: #fff;
+  padding: 0.55rem 1.3rem;
+  border-radius: 0.6rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+  box-shadow: 0 0 14px rgba(16, 185, 129, 0.35);
 }
-.btn-primary:disabled {
+.btn-emerald:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+  box-shadow: 0 0 22px rgba(16, 185, 129, 0.55);
+}
+.btn-emerald:active { transform: translateY(0); }
+.btn-emerald:disabled {
   opacity: 0.4;
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
 }
 
-/* ---- Success button (emerald neon) ---- */
-.btn-success {
-  background: linear-gradient(135deg, #059669 0%, #10B981 100%);
-  color: #fff;
-  border: none;
-  cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-  box-shadow: 0 0 18px rgba(16, 185, 129, 0.35);
-}
-.btn-success:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 0 28px rgba(16, 185, 129, 0.55);
-}
-.btn-success:active {
-  transform: translateY(0);
-}
-
-/* ---- Ghost button ---- */
-.btn-ghost {
-  background: transparent;
-  color: #94a3b8;
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
-}
-.btn-ghost:hover {
-  background: rgba(148, 163, 184, 0.1);
-  color: #cbd5e1;
-  border-color: rgba(148, 163, 184, 0.45);
-}
-
-/* ---- Trick Card ---- */
+/* ── Trick card base ───────────────────────────────────── */
 .trick-card {
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(51, 65, 85, 0.6);
-  border-radius: 0.875rem;
-  padding: 1.1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   position: relative;
   overflow: hidden;
 }
-.trick-card::before {
+
+/* ── LOCKED card ───────────────────────────────────────── */
+.trick-card.state-locked {
+  background: var(--card-locked-bg);
+  opacity: 0.55;
+  filter: grayscale(0.6);
+}
+.trick-card.state-locked .trick-action-btn {
+  background: rgba(63, 63, 70, 0.5);
+  color: #71717a;
+  cursor: not-allowed;
+  border: 1px solid rgba(63, 63, 70, 0.4);
+}
+
+/* ── UNLOCKED card ─────────────────────────────────────── */
+.trick-card.state-unlocked {
+  background: var(--card-unlocked-bg);
+  border-color: rgba(139, 92, 246, 0.25);
+  box-shadow: 0 0 18px rgba(139, 92, 246, 0.08);
+}
+.trick-card.state-unlocked:hover {
+  border-color: rgba(139, 92, 246, 0.5);
+  box-shadow: 0 0 28px rgba(139, 92, 246, 0.2);
+  transform: translateY(-2px);
+}
+.trick-card.state-unlocked .trick-action-btn {
+  background: linear-gradient(135deg, var(--neon-violet), #6D28D9);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.3);
+}
+.trick-card.state-unlocked .trick-action-btn:hover {
+  box-shadow: 0 0 18px rgba(139, 92, 246, 0.5);
+  opacity: 0.92;
+}
+
+/* ── MASTERED card ─────────────────────────────────────── */
+.trick-card.state-mastered {
+  background: var(--card-mastered-bg);
+  border-color: rgba(16, 185, 129, 0.3);
+  box-shadow: 0 0 18px rgba(16, 185, 129, 0.1);
+}
+.trick-card.state-mastered:hover {
+  border-color: rgba(16, 185, 129, 0.55);
+  box-shadow: 0 0 28px rgba(16, 185, 129, 0.22);
+  transform: translateY(-2px);
+}
+.trick-card.state-mastered .trick-action-btn {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--neon-emerald);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  cursor: pointer;
+}
+.trick-card.state-mastered .trick-action-btn:hover {
+  background: rgba(16, 185, 129, 0.25);
+}
+
+/* Mastered shimmer overlay */
+.trick-card.state-mastered::before {
   content: '';
   position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 3px;
-  border-radius: 0.875rem 0.875rem 0 0;
-  background: transparent;
-  transition: background 0.3s ease;
-}
-.trick-card.status-unlocked {
-  border-color: rgba(16, 185, 129, 0.35);
-}
-.trick-card.status-unlocked::before {
-  background: linear-gradient(90deg, #10B981, #34D399);
-}
-.trick-card.status-unlocked:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 8px 30px rgba(16, 185, 129, 0.2);
-  border-color: rgba(16, 185, 129, 0.6);
-}
-.trick-card.status-mastered {
-  border-color: rgba(139, 92, 246, 0.45);
-}
-.trick-card.status-mastered::before {
-  background: linear-gradient(90deg, #8B5CF6, #A78BFA);
-}
-.trick-card.status-mastered:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 8px 30px rgba(139, 92, 246, 0.25);
-  border-color: rgba(139, 92, 246, 0.7);
-}
-.trick-card.status-locked {
-  opacity: 0.55;
-  border-color: rgba(51, 65, 85, 0.4);
-}
-.trick-card.status-locked:hover {
-  opacity: 0.7;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(16,185,129,0.04), transparent 60%);
+  pointer-events: none;
 }
 
-/* ---- Status Badge ---- */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0.2rem 0.6rem;
-  border-radius: 999px;
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-.badge-locked {
-  background: rgba(71, 85, 105, 0.4);
-  color: #64748b;
-  border: 1px solid rgba(71, 85, 105, 0.4);
-}
-.badge-unlocked {
-  background: rgba(16, 185, 129, 0.15);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.35);
-}
-.badge-mastered {
-  background: rgba(139, 92, 246, 0.2);
-  color: #a78bfa;
-  border: 1px solid rgba(139, 92, 246, 0.45);
-}
+/* ── Status badges ─────────────────────────────────────── */
+.badge-locked  { background: rgba(63,63,70,0.6);   color: #a1a1aa; }
+.badge-unlocked{ background: rgba(139,92,246,0.2);  color: #a78bfa; border: 1px solid rgba(139,92,246,0.35); }
+.badge-mastered{ background: rgba(16,185,129,0.2);  color: #34d399; border: 1px solid rgba(16,185,129,0.35); }
 
-/* ---- Difficulty dots ---- */
-.diff-dot {
-  display: inline-block;
+/* ── Difficulty star dots ──────────────────────────────── */
+.star-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  margin-right: 2px;
+  background: #3f3f46;
 }
+.star-dot.filled { background: var(--neon-violet); box-shadow: 0 0 4px rgba(139,92,246,0.6); }
+.star-dot.filled-mastered { background: var(--neon-emerald); box-shadow: 0 0 4px rgba(16,185,129,0.6); }
 
-/* ---- Trick action buttons ---- */
-.btn-trick {
-  width: 100%;
-  padding: 0.45rem 0;
-  border-radius: 0.6rem;
-  font-size: 0.78rem;
-  font-weight: 700;
-  cursor: pointer;
-  border: 1px solid transparent;
-  transition: all 0.15s ease;
-  margin-top: 0.25rem;
-}
-.btn-trick-master {
-  background: linear-gradient(135deg, #059669, #10B981);
-  color: #fff;
-  box-shadow: 0 2px 12px rgba(16, 185, 129, 0.25);
-}
-.btn-trick-master:hover {
-  box-shadow: 0 4px 20px rgba(16, 185, 129, 0.45);
-  transform: translateY(-1px);
-}
-.btn-trick-reset {
-  background: transparent;
-  color: #a78bfa;
-  border-color: rgba(139, 92, 246, 0.35);
-}
-.btn-trick-reset:hover {
-  background: rgba(139, 92, 246, 0.1);
-  border-color: rgba(139, 92, 246, 0.6);
-}
-.btn-trick-locked {
-  background: rgba(51, 65, 85, 0.3);
-  color: #475569;
-  cursor: not-allowed;
-}
-
-/* ---- Combo Flow ---- */
+/* ── Combo flow card ───────────────────────────────────── */
 .combo-step {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.25rem;
-}
-.combo-step-card {
-  background: rgba(30, 27, 75, 0.6);
-  border: 1.5px solid rgba(139, 92, 246, 0.4);
-  border-radius: 0.875rem;
-  padding: 0.9rem 1.1rem;
-  min-width: 120px;
+  background: rgba(26, 20, 44, 0.85);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: 0.75rem;
+  padding: 0.75rem 1rem;
+  min-width: 100px;
   text-align: center;
-  position: relative;
-  animation: slideInUp 0.35s ease both;
+  animation: popIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
-.combo-step-card:nth-child(1) { animation-delay: 0.05s; }
-.combo-step-card:nth-child(2) { animation-delay: 0.15s; }
-.combo-step-card:nth-child(3) { animation-delay: 0.25s; }
-.combo-step-card:nth-child(4) { animation-delay: 0.35s; }
-.combo-step-card:nth-child(5) { animation-delay: 0.45s; }
-
-.combo-step-card.is-bind {
-  border-color: rgba(16, 185, 129, 0.5);
-  background: rgba(5, 150, 105, 0.15);
+.combo-step .step-num {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #a78bfa;
+  margin-bottom: 0.25rem;
 }
+.combo-step .step-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #f4f4f5;
+}
+.combo-step.bind-step {
+  background: rgba(13, 36, 28, 0.85);
+  border-color: rgba(16, 185, 129, 0.35);
+}
+.combo-step.bind-step .step-num { color: #34d399; }
 
+/* Arrow between steps */
 .combo-arrow {
-  font-size: 1.4rem;
-  color: #475569;
-  line-height: 1;
-  padding: 0 0.2rem;
-  align-self: center;
+  color: #52525b;
+  font-size: 1.1rem;
+  font-weight: bold;
+  animation: fadeIn 0.3s ease both;
 }
 
-/* ---- Toast ---- */
-.toast-container {
-  animation: slideInRight 0.3s ease;
+/* ── Toast notification ────────────────────────────────── */
+.toast {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  background: rgba(24, 24, 27, 0.95);
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  color: #f4f4f5;
+  padding: 0.7rem 1.2rem;
+  border-radius: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.25);
+  z-index: 9999;
+  animation: slideUp 0.3s ease both;
 }
-.toast-success { border-color: rgba(16, 185, 129, 0.5) !important; }
-.toast-error   { border-color: rgba(239, 68, 68, 0.5) !important; }
-.toast-info    { border-color: rgba(139, 92, 246, 0.5) !important; }
+.toast.toast-emerald {
+  border-color: rgba(16, 185, 129, 0.4);
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.25);
+}
 
-/* ===== Keyframes ===== */
-@keyframes slideInUp {
-  from { opacity: 0; transform: translateY(18px); }
-  to   { opacity: 1; transform: translateY(0); }
+/* ── Animations ────────────────────────────────────────── */
+@keyframes popIn {
+  from { opacity: 0; transform: scale(0.7); }
+  to   { opacity: 1; transform: scale(1);   }
 }
-@keyframes slideInRight {
-  from { opacity: 0; transform: translateX(30px); }
-  to   { opacity: 1; transform: translateX(0); }
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0);    }
 }
-@keyframes pulse-neon {
-  0%, 100% { box-shadow: 0 0 12px rgba(139, 92, 246, 0.4); }
-  50%       { box-shadow: 0 0 26px rgba(139, 92, 246, 0.8); }
-}
+
 @keyframes fadeIn {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
 
-/* ---- Entrance animation for trick cards ---- */
-.trick-card {
-  animation: fadeIn 0.3s ease both;
+@keyframes xpPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.5); }
+  70%  { box-shadow: 0 0 0 10px rgba(139, 92, 246, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0); }
 }
+.xp-pulse { animation: xpPulse 0.6s ease; }
 
-/* ---- Neon pulse for mastered card ---- */
-.trick-card.status-mastered {
-  animation: fadeIn 0.3s ease both, pulse-neon 3s ease-in-out infinite;
+/* Level-up ring flash */
+@keyframes levelUpFlash {
+  0%,100% { box-shadow: 0 0 0 0 rgba(139,92,246,0); }
+  40%     { box-shadow: 0 0 0 8px rgba(139,92,246,0.6); }
 }
+.level-up-flash { animation: levelUpFlash 0.8s ease; }
 
-/* ---- Stagger delays for grid ---- */
-.trick-card:nth-child(1)  { animation-delay: 0.03s; }
-.trick-card:nth-child(2)  { animation-delay: 0.07s; }
-.trick-card:nth-child(3)  { animation-delay: 0.11s; }
-.trick-card:nth-child(4)  { animation-delay: 0.15s; }
-.trick-card:nth-child(5)  { animation-delay: 0.19s; }
-.trick-card:nth-child(6)  { animation-delay: 0.23s; }
-.trick-card:nth-child(7)  { animation-delay: 0.27s; }
-.trick-card:nth-child(8)  { animation-delay: 0.31s; }
-
-/* Scrollbar styling */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: #0f172a; }
-::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #475569; }
+/* ── Scrollbar styling ─────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #18181b; }
+::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #52525b; }

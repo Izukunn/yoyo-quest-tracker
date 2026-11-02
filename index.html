@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>YoYo Quest Tracker & Combo Master</title>
+  <title>YoYo Quest Tracker &amp; Combo Master</title>
+  <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -11,146 +12,166 @@
       theme: {
         extend: {
           colors: {
-            violet: { 500: '#8B5CF6', 400: '#A78BFA', 600: '#7C3AED' },
-            emerald: { 500: '#10B981', 400: '#34D399', 600: '#059669' }
+            'neon-violet': '#8B5CF6',
+            'neon-emerald': '#10B981',
           },
           fontFamily: {
-            sans: ['"Inter"', 'system-ui', 'sans-serif']
-          }
-        }
-      }
-    }
+            sans: ['"Segoe UI"', 'system-ui', 'sans-serif'],
+          },
+        },
+      },
+    };
   </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen font-sans">
+<body class="bg-zinc-950 text-zinc-100 min-h-screen font-sans antialiased">
 
-  <!-- ===== HEADER ===== -->
-  <header class="border-b border-slate-800 bg-slate-950/80 backdrop-blur-md sticky top-0 z-50">
-    <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+  <!-- ============================================================
+       APP HEADER
+  ============================================================ -->
+  <header class="sticky top-0 z-50 bg-zinc-900/80 backdrop-blur border-b border-zinc-800">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
       <div class="flex items-center gap-3">
-        <span class="text-2xl select-none">🪀</span>
-        <h1 class="text-xl font-extrabold tracking-tight">
-          <span class="text-violet-400">YoYo</span>
-          <span class="text-slate-100"> Quest</span>
+        <!-- Logo mark -->
+        <span class="text-2xl" aria-hidden="true">🪀</span>
+        <h1 class="text-lg font-bold tracking-tight text-zinc-100">
+          YoYo Quest <span class="text-neon-violet">Tracker</span> &amp; <span class="text-neon-emerald">Combo Master</span>
         </h1>
       </div>
-      <nav class="flex gap-2" role="navigation" aria-label="Main Navigation">
-        <button id="nav-skill-tree" class="nav-btn active-nav px-4 py-2 rounded-lg text-sm font-semibold transition-all" aria-pressed="true">
-          🌳 Skill Tree
+      <!-- Nav tabs -->
+      <nav class="flex gap-1" aria-label="App sections">
+        <button id="tab-skilltree"
+          class="tab-btn active-tab px-4 py-1.5 rounded-lg text-sm font-medium transition-all"
+          aria-selected="true" role="tab">
+          Skill Tree
         </button>
-        <button id="nav-combo" class="nav-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all" aria-pressed="false">
-          ⚡ Combo Master
+        <button id="tab-combo"
+          class="tab-btn px-4 py-1.5 rounded-lg text-sm font-medium transition-all"
+          aria-selected="false" role="tab">
+          Combo Master
         </button>
       </nav>
     </div>
   </header>
 
-  <!-- ===== MAIN ===== -->
   <main class="max-w-6xl mx-auto px-4 py-8">
 
-    <!-- === PLAYER PROFILE CARD === -->
-    <section id="player-profile" aria-label="Player Profile" class="glass-card rounded-2xl p-6 mb-8">
-      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div class="flex items-center gap-4">
-          <div class="w-16 h-16 rounded-full bg-violet-500/20 border-2 border-violet-500 flex items-center justify-center text-3xl select-none" aria-hidden="true">🪀</div>
-          <div>
-            <p class="text-xs text-slate-400 uppercase tracking-widest font-semibold">Player</p>
-            <h2 class="text-2xl font-extrabold text-slate-100">Yoyo Rider</h2>
-            <p id="player-title" class="text-sm text-violet-400 font-medium mt-0.5">Novice Thrower</p>
-          </div>
-        </div>
-        <div class="flex flex-wrap gap-4">
-          <div class="stat-pill" aria-label="Player Level">
-            <span class="stat-label">Level</span>
-            <span id="player-level" class="stat-value text-violet-400">1</span>
-          </div>
-          <div class="stat-pill" aria-label="Total XP">
-            <span class="stat-label">Total XP</span>
-            <span id="player-xp" class="stat-value text-emerald-400">0</span>
-          </div>
-          <div class="stat-pill" aria-label="Mastered Tricks">
-            <span class="stat-label">Mastered</span>
-            <span id="player-mastered" class="stat-value text-amber-400">0</span>
-          </div>
+    <!-- ============================================================
+         PLAYER PROFILE PANEL (always visible)
+    ============================================================ -->
+    <section id="player-panel" aria-label="Player Profile" class="glass-panel rounded-xl p-5 mb-8 flex flex-wrap items-center gap-6">
+      <div class="flex items-center gap-4">
+        <div class="w-14 h-14 rounded-full bg-neon-violet/20 border-2 border-neon-violet flex items-center justify-center text-2xl" aria-hidden="true">🎮</div>
+        <div>
+          <p class="text-xs text-zinc-400 uppercase tracking-widest">Player</p>
+          <p class="text-lg font-bold text-zinc-100">YoYo Master</p>
         </div>
       </div>
-      <!-- XP Progress Bar -->
-      <div class="mt-5">
-        <div class="flex justify-between text-xs text-slate-400 mb-1">
-          <span>XP Progress</span>
-          <span id="xp-progress-label">0 / 100 XP to next level</span>
+      <!-- Stats -->
+      <div class="flex flex-wrap gap-4 ml-auto">
+        <div class="stat-card" aria-label="Level">
+          <p class="stat-label">Level</p>
+          <p id="player-level" class="stat-value text-neon-violet">1</p>
         </div>
-        <div class="w-full h-3 bg-slate-800 rounded-full overflow-hidden" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" id="xp-bar-wrapper">
-          <div id="xp-bar" class="h-full bg-gradient-to-r from-violet-500 to-emerald-500 rounded-full transition-all duration-700 ease-out" style="width:0%"></div>
+        <div class="stat-card" aria-label="Tricks Mastered">
+          <p class="stat-label">Mastered</p>
+          <p id="player-mastered" class="stat-value text-neon-emerald">0</p>
+        </div>
+        <div class="stat-card" aria-label="Total XP">
+          <p class="stat-label">Total XP</p>
+          <p id="player-xp" class="stat-value text-amber-400">0</p>
+        </div>
+      </div>
+      <!-- XP bar -->
+      <div class="w-full mt-1">
+        <div class="flex justify-between text-xs text-zinc-400 mb-1">
+          <span>XP to next level</span>
+          <span id="xp-bar-label">0 / 200 XP</span>
+        </div>
+        <div class="w-full bg-zinc-800 rounded-full h-2 overflow-hidden">
+          <div id="xp-bar" class="h-2 rounded-full bg-gradient-to-r from-neon-violet to-neon-emerald transition-all duration-500" style="width:0%"></div>
         </div>
       </div>
     </section>
 
-    <!-- ===== SKILL TREE VIEW ===== -->
-    <section id="view-skill-tree" aria-label="Skill Tree">
-      <div class="flex items-center justify-between mb-6">
-        <h3 class="text-lg font-bold text-slate-100 flex items-center gap-2">
-          <span aria-hidden="true">🌳</span> 1A Skill Tree
-        </h3>
-        <span id="progress-summary" class="text-sm text-slate-400"></span>
+    <!-- ============================================================
+         TAB: SKILL TREE
+    ============================================================ -->
+    <section id="view-skilltree" aria-label="Skill Tree" class="view-section">
+      <div class="mb-6">
+        <h2 class="text-xl font-bold text-zinc-100">Skill Tree — 1A Division</h2>
+        <p class="text-sm text-zinc-400 mt-1">Master prerequisite tricks to unlock the next ones. Each mastered trick grants XP.</p>
       </div>
-      <div id="skill-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5" role="list" aria-label="Trick Cards">
-        <!-- Trick cards injected by JS -->
+      <!-- Trick grid — populated by JS -->
+      <div id="trick-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" role="list" aria-label="Trick cards">
       </div>
     </section>
 
-    <!-- ===== COMBO MASTER VIEW ===== -->
-    <section id="view-combo" aria-label="Combo Master" class="hidden">
-      <div class="flex items-center justify-between mb-6">
-        <h3 class="text-lg font-bold text-slate-100 flex items-center gap-2">
-          <span aria-hidden="true">⚡</span> Daily Combo Challenge
-        </h3>
+    <!-- ============================================================
+         TAB: COMBO MASTER (hidden by default)
+    ============================================================ -->
+    <section id="view-combo" aria-label="Combo Master" class="view-section hidden">
+      <div class="mb-6">
+        <h2 class="text-xl font-bold text-zinc-100">Combo Routine Generator</h2>
+        <p class="text-sm text-zinc-400 mt-1">Generate a random daily combo from your available tricks and earn XP by completing it.</p>
       </div>
 
-      <div class="glass-card rounded-2xl p-6 mb-6">
-        <p class="text-slate-400 text-sm mb-5 leading-relaxed">
-          Generate a random combo routine from your <span class="text-emerald-400 font-semibold">Unlocked</span> &amp; <span class="text-violet-400 font-semibold">Mastered</span> tricks. Complete the challenge to earn <span class="text-amber-400 font-bold">+50 XP</span>!
-        </p>
-        <button id="btn-generate-combo" class="btn-primary w-full sm:w-auto px-6 py-3 rounded-xl font-bold text-base">
-          🎲 Generate Daily Combo Challenge
+      <!-- Generate button -->
+      <div class="flex flex-wrap gap-3 mb-8">
+        <button id="btn-generate" class="btn-primary flex items-center gap-2">
+          <span aria-hidden="true">⚡</span> Generate Daily Combo Challenge
         </button>
       </div>
 
       <!-- Combo display area -->
       <div id="combo-display" class="hidden">
-        <div id="combo-flow" class="flex flex-col sm:flex-row flex-wrap items-center gap-2 sm:gap-3 mb-6" role="list" aria-label="Combo Routine Steps">
-          <!-- combo steps injected by JS -->
-        </div>
-        <div class="flex flex-col sm:flex-row items-center gap-3 mt-4">
-          <button id="btn-complete-combo" class="btn-success px-6 py-3 rounded-xl font-bold text-base w-full sm:w-auto">
-            ✅ Complete Challenge (+50 XP)
-          </button>
-          <button id="btn-regenerate-combo" class="btn-ghost px-6 py-3 rounded-xl font-semibold text-base w-full sm:w-auto">
-            🔄 Regenerate
-          </button>
-        </div>
+        <h3 class="text-sm font-semibold text-zinc-400 uppercase tracking-widest mb-4">Your Challenge Routine</h3>
+        <!-- Combo flow — populated by JS -->
+        <div id="combo-flow" class="flex flex-wrap items-center gap-3 mb-8" role="list" aria-label="Combo sequence"></div>
+
+        <!-- Complete challenge button -->
+        <button id="btn-complete" class="btn-emerald flex items-center gap-2">
+          <span aria-hidden="true">✅</span> Complete Challenge <span class="text-xs opacity-70">(+50 XP)</span>
+        </button>
+        <!-- Feedback message -->
+        <p id="combo-feedback" class="mt-4 text-sm font-medium hidden"></p>
       </div>
 
-      <!-- Empty state -->
-      <div id="combo-empty" class="hidden glass-card rounded-2xl p-8 text-center">
-        <p class="text-4xl mb-3" aria-hidden="true">🔒</p>
-        <p class="text-slate-300 font-semibold text-lg">Not Enough Tricks Available</p>
-        <p class="text-slate-500 text-sm mt-1">Unlock or Master at least 3 tricks in the Skill Tree to generate a combo!</p>
+      <!-- Empty state when no unlocked tricks -->
+      <div id="combo-empty" class="hidden glass-panel rounded-xl p-8 text-center">
+        <p class="text-3xl mb-3" aria-hidden="true">🔒</p>
+        <p class="text-zinc-300 font-medium">No available tricks yet!</p>
+        <p class="text-zinc-500 text-sm mt-1">Head to the Skill Tree tab and master some tricks first.</p>
       </div>
     </section>
 
   </main>
 
-  <!-- ===== TOAST NOTIFICATION ===== -->
-  <div id="toast" class="toast-container fixed bottom-6 right-6 z-50 hidden" role="status" aria-live="polite">
-    <div id="toast-inner" class="glass-card rounded-xl px-5 py-3 text-sm font-semibold flex items-center gap-3 shadow-xl">
-      <span id="toast-icon" aria-hidden="true"></span>
-      <span id="toast-msg"></span>
-    </div>
-  </div>
+  <!-- ============================================================
+       XP GAIN TOAST NOTIFICATION
+  ============================================================ -->
+  <div id="toast" class="toast hidden" role="alert" aria-live="polite"></div>
+
+  <!-- Trick Card Template (hidden, cloned by JS) -->
+  <template id="trick-card-template">
+    <article class="trick-card rounded-xl p-5 flex flex-col gap-3 transition-all duration-300" role="listitem">
+      <div class="flex items-start justify-between gap-2">
+        <div>
+          <h3 class="trick-name font-bold text-base text-zinc-100 leading-tight"></h3>
+          <p class="trick-category text-xs text-zinc-400 mt-0.5"></p>
+        </div>
+        <span class="trick-badge status-badge text-xs font-semibold px-2 py-0.5 rounded-full shrink-0"></span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-xs text-zinc-500">Difficulty:</span>
+        <div class="trick-difficulty flex gap-1" aria-label="Difficulty stars"></div>
+      </div>
+      <p class="trick-prereq text-xs text-zinc-500"></p>
+      <div class="mt-auto">
+        <button class="trick-action-btn w-full py-2 px-3 rounded-lg text-sm font-semibold transition-all duration-200"></button>
+      </div>
+    </article>
+  </template>
 
   <script src="script.js"></script>
 </body>

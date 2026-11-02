@@ -1,729 +1,667 @@
 /**
- * ============================================================
- * YoYo Quest Tracker & Combo Master — script.js
- * Vanilla JS | Dark Mode | Gamified SPA
- * ============================================================
+ * YoYo Quest Tracker & Combo Master
+ * script.js — Main application logic
+ *
+ * Architecture:
+ *  - STATE         : single source of truth object
+ *  - DATA          : static trick definitions
+ *  - UTILS         : pure helpers
+ *  - SKILL TREE    : rendering + interaction
+ *  - COMBO ENGINE  : generator + challenge logic
+ *  - PROFILE HUD   : XP / Level display
+ *  - TABS          : navigation
+ *  - INIT          : bootstrap
  */
 
 'use strict';
 
-// ============================================================
-// 1. GAME DATA — Trick Definitions (JSON)
-// ============================================================
+/* ============================================================
+   DATA — Static Trick Definitions
+============================================================ */
 
 /**
- * Each trick:
- *  id         – unique string identifier
- *  name       – display name
- *  category   – trick style category
- *  difficulty – 1 (Beginner) to 5 (Advanced)
- *  prereq     – id of prerequisite trick, or null
- *  xpReward   – XP earned when mastered
+ * @typedef {Object} TrickDef
+ * @property {string}   id         - Unique identifier (slug)
+ * @property {string}   name       - Display name
+ * @property {string}   category   - Trick category
+ * @property {number}   difficulty - 1–5 star rating
+ * @property {string[]} prereqs    - IDs that must be 'mastered' first
+ * @property {number}   xpReward   - XP granted on mastery
  */
+
+/** @type {TrickDef[]} */
 const TRICKS_DATA = [
   {
     id: 'sleeper',
     name: 'Sleeper',
-    category: 'Foundation',
+    category: 'Foundational',
     difficulty: 1,
-    prereq: null,
-    xpReward: 30,
+    prereqs: [],
+    xpReward: 50,
   },
   {
     id: 'breakaway',
     name: 'Breakaway',
-    category: 'Foundation',
+    category: 'Foundational',
     difficulty: 1,
-    prereq: null,
-    xpReward: 30,
+    prereqs: [],
+    xpReward: 50,
   },
   {
     id: 'front-mount',
     name: 'Front Mount',
     category: 'Mount',
     difficulty: 2,
-    prereq: 'sleeper',
-    xpReward: 50,
+    prereqs: ['sleeper'],
+    xpReward: 75,
   },
   {
     id: 'trapeze',
     name: 'Trapeze',
     category: 'Mount',
     difficulty: 2,
-    prereq: 'breakaway',
-    xpReward: 50,
+    prereqs: ['breakaway'],
+    xpReward: 75,
   },
   {
     id: 'brain-twister',
     name: 'Brain Twister',
-    category: 'String Trick',
+    category: 'Combo',
     difficulty: 3,
-    prereq: 'front-mount',
-    xpReward: 75,
+    prereqs: ['front-mount'],
+    xpReward: 100,
   },
   {
     id: 'trapeze-brother',
-    name: "Trapeze & His Brother",
+    name: 'Trapeze and His Brother',
     category: 'Mount',
     difficulty: 3,
-    prereq: 'trapeze',
-    xpReward: 75,
+    prereqs: ['trapeze'],
+    xpReward: 100,
   },
   {
     id: 'double-or-nothing',
     name: 'Double or Nothing',
     category: 'Mount',
     difficulty: 4,
-    prereq: 'trapeze',
-    xpReward: 100,
+    prereqs: ['trapeze'],
+    xpReward: 125,
   },
   {
     id: 'bind',
     name: 'Bind',
     category: 'Essential',
     difficulty: 2,
-    prereq: 'trapeze',
-    xpReward: 50,
+    prereqs: ['trapeze'],
+    xpReward: 75,
   },
 ];
 
-// XP needed per level (index = level, value = cumulative XP to reach that level)
-const LEVEL_THRESHOLDS = [0, 100, 250, 450, 700, 1000, 1400, 1900, 2500, 3200, 4000];
-
-// Player title per level
-const PLAYER_TITLES = [
-  'Novice Thrower',      // L1
-  'String Spinner',      // L2
-  'Mount Apprentice',    // L3
-  'Combo Seeker',        // L4
-  'Trick Architect',     // L5
-  'Yoyo Veteran',        // L6
-  'Combo Artisan',       // L7
-  'Trick Master',        // L8
-  'Elite Spinner',       // L9
-  'YoYo Legend',         // L10
-];
-
-// ============================================================
-// 2. STATE MANAGEMENT
-// ============================================================
+/* ============================================================
+   STATE — Single source of truth
+============================================================ */
 
 /**
- * Application state — source of truth.
- * Persisted to localStorage on every mutation.
+ * @typedef {'locked'|'unlocked'|'mastered'} TrickStatus
+ * @typedef {Object} PlayerState
+ * @property {number} xp       - Accumulated total XP
+ * @property {number} level    - Current player level
+ * @property {Object.<string, TrickStatus>} tricks - Map of trick id -> status
  */
-let state = {
-  // trick statuses: 'locked' | 'unlocked' | 'mastered'
-  trickStatus: {},     // { [trickId]: 'locked' | 'unlocked' | 'mastered' }
-  player: {
-    xp: 0,
-    level: 1,
-  },
-  currentCombo: [],    // array of trick ids in current combo
-  comboCompleted: false,
+
+/** @type {PlayerState} */
+const STATE = {
+  xp: 0,
+  level: 1,
+  tricks: {},    // populated in initState()
 };
 
-const STORAGE_KEY = 'yoyo_quest_state_v1';
+/* XP thresholds per level (index = level - 1) */
+const LEVEL_XP_TABLE = [0, 200, 500, 900, 1400, 2000, 2800, 3800, 5000];
 
-/** Persist state to localStorage */
-function saveState() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch (_) { /* storage unavailable — silent fail */ }
+/* XP reward for completing a combo challenge */
+const COMBO_CHALLENGE_XP = 50;
+
+/* ============================================================
+   UTILS — Pure helpers
+============================================================ */
+
+/**
+ * Compute the unlocked/locked status of a trick (does NOT touch 'mastered').
+ * A trick is unlocked only when ALL its prereqs are 'mastered'.
+ * @param {TrickDef} trick
+ * @returns {TrickStatus}
+ */
+function computeStatus(trick) {
+  const allPrereqsMet = trick.prereqs.every(
+    (pid) => STATE.tricks[pid] === 'mastered'
+  );
+  return allPrereqsMet ? 'unlocked' : 'locked';
 }
 
-/** Load persisted state; initialise defaults if absent */
-function loadState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const saved = JSON.parse(raw);
-      // Merge only known keys to avoid stale data issues
-      if (saved.trickStatus) state.trickStatus = saved.trickStatus;
-      if (saved.player)      state.player      = saved.player;
-    }
-  } catch (_) { /* corrupted storage — start fresh */ }
-
-  // Initialise any missing trick statuses
-  TRICKS_DATA.forEach(trick => {
-    if (!state.trickStatus[trick.id]) {
-      state.trickStatus[trick.id] = trick.prereq === null ? 'unlocked' : 'locked';
+/**
+ * Re-compute unlocked/locked for every trick that is NOT currently mastered.
+ * Mastered tricks are only touched by explicit user actions (onSetMastered /
+ * cascadeLock), so they are skipped here.
+ */
+function recomputeAllStatuses() {
+  TRICKS_DATA.forEach((trick) => {
+    if (STATE.tricks[trick.id] !== 'mastered') {
+      STATE.tricks[trick.id] = computeStatus(trick);
     }
   });
 }
 
-// ============================================================
-// 3. GAME LOGIC — XP & Levels
-// ============================================================
+/**
+ * Recursively force-lock a trick and every trick that directly or indirectly
+ * depends on it (cascading reset). Also deducts the xpReward of every
+ * mastered trick that gets locked in the process.
+ *
+ * @param {string} trickId   - The trick being locked / reset
+ * @param {Set<string>} [visited] - Internal guard against infinite cycles
+ */
+function cascadeLock(trickId, visited = new Set()) {
+  if (visited.has(trickId)) return;
+  visited.add(trickId);
+
+  // Find every trick that lists trickId as a direct prerequisite
+  const dependents = TRICKS_DATA.filter((t) => t.prereqs.includes(trickId));
+
+  dependents.forEach((dep) => {
+    // If the dependent was mastered, deduct its XP before locking it
+    if (STATE.tricks[dep.id] === 'mastered') {
+      STATE.xp = Math.max(0, STATE.xp - dep.xpReward);
+    }
+    STATE.tricks[dep.id] = 'locked';
+    // Recurse into this dependent's own dependents
+    cascadeLock(dep.id, visited);
+  });
+}
 
 /**
- * Calculate current level based on total XP.
+ * Calculate the player's level from their total XP.
  * @param {number} xp
- * @returns {number} level (1-indexed)
+ * @returns {number}
  */
 function calcLevel(xp) {
   let level = 1;
-  for (let i = LEVEL_THRESHOLDS.length - 1; i >= 1; i--) {
-    if (xp >= LEVEL_THRESHOLDS[i]) {
+  for (let i = LEVEL_XP_TABLE.length - 1; i >= 0; i--) {
+    if (xp >= LEVEL_XP_TABLE[i]) {
       level = i + 1;
       break;
     }
   }
-  return Math.min(level, LEVEL_THRESHOLDS.length);
+  return level;
 }
 
 /**
- * Add XP to the player and update level.
- * Returns { prevLevel, newLevel, levelled } for UI feedback.
- * @param {number} amount
+ * Return the XP required for the NEXT level given total XP.
+ * @param {number} xp
+ * @returns {{ current: number, next: number, progress: number }}
  */
-function addXP(amount) {
-  const prevLevel = state.player.level;
-  state.player.xp   += amount;
-  state.player.level = calcLevel(state.player.xp);
-  const levelled = state.player.level > prevLevel;
-  saveState();
-  return { prevLevel, newLevel: state.player.level, levelled };
+function xpForNextLevel(xp) {
+  const level = calcLevel(xp);
+  const currentThreshold = LEVEL_XP_TABLE[level - 1] ?? 0;
+  const nextThreshold = LEVEL_XP_TABLE[level] ?? LEVEL_XP_TABLE[LEVEL_XP_TABLE.length - 1];
+  const delta = nextThreshold - currentThreshold;
+  const earned = xp - currentThreshold;
+  const progress = delta > 0 ? Math.min(earned / delta, 1) : 1;
+  return {
+    current: earned,
+    next: delta,
+    progress,
+  };
 }
 
 /**
- * XP progress within current level (0–1 fraction).
- */
-function xpProgress() {
-  const lvl = state.player.level;
-  const maxLvl = LEVEL_THRESHOLDS.length;
-  if (lvl >= maxLvl) return { current: state.player.xp, needed: state.player.xp, fraction: 1 };
-  const xpThisLevel = LEVEL_THRESHOLDS[lvl - 1];       // XP at start of current level
-  const xpNextLevel = LEVEL_THRESHOLDS[lvl];            // XP needed to reach next level
-  const current     = state.player.xp - xpThisLevel;
-  const needed      = xpNextLevel - xpThisLevel;
-  const fraction    = Math.min(current / needed, 1);
-  return { current, needed, fraction };
-}
-
-// ============================================================
-// 4. GAME LOGIC — Skill Tree
-// ============================================================
-
-/**
- * Recompute all trick statuses based on prerequisite chain.
- * Only 'locked' tricks are checked; mastered tricks stay mastered.
- */
-function recomputeStatuses() {
-  TRICKS_DATA.forEach(trick => {
-    // If already mastered, leave it
-    if (state.trickStatus[trick.id] === 'mastered') return;
-
-    // No prereq → always unlocked
-    if (trick.prereq === null) {
-      state.trickStatus[trick.id] = 'unlocked';
-      return;
-    }
-
-    // Unlock if prereq is mastered
-    const prereqStatus = state.trickStatus[trick.prereq];
-    if (prereqStatus === 'mastered') {
-      state.trickStatus[trick.id] = 'unlocked';
-    } else {
-      state.trickStatus[trick.id] = 'locked';
-    }
-  });
-  saveState();
-}
-
-/**
- * Set a trick to 'mastered'. Rewards XP. Returns XP result.
- * @param {string} trickId
- */
-function masterTrick(trickId) {
-  if (state.trickStatus[trickId] !== 'unlocked') return null;
-  state.trickStatus[trickId] = 'mastered';
-  const trick = TRICKS_DATA.find(t => t.id === trickId);
-  const xpResult = addXP(trick.xpReward);
-  recomputeStatuses();
-  return xpResult;
-}
-
-/**
- * Reset a trick back to 'unlocked'. Also resets any mastered tricks
- * that depend (directly or transitively) on this trick.
- * @param {string} trickId
- */
-function resetTrick(trickId) {
-  if (state.trickStatus[trickId] !== 'mastered') return;
-
-  // BFS to find all tricks that depend on trickId (transitively)
-  const dependents = getDependents(trickId);
-
-  // Deduct XP for this trick
-  const trick = TRICKS_DATA.find(t => t.id === trickId);
-  state.player.xp = Math.max(0, state.player.xp - trick.xpReward);
-
-  // Deduct XP for each mastered dependent and reset them
-  dependents.forEach(depId => {
-    if (state.trickStatus[depId] === 'mastered') {
-      const dep = TRICKS_DATA.find(t => t.id === depId);
-      state.player.xp = Math.max(0, state.player.xp - dep.xpReward);
-    }
-    state.trickStatus[depId] = 'locked';
-  });
-
-  state.trickStatus[trickId] = 'unlocked';
-  state.player.level = calcLevel(state.player.xp);
-  recomputeStatuses();
-}
-
-/**
- * Get all trick IDs that directly or transitively depend on a given trick.
- * @param {string} trickId
- * @returns {string[]}
- */
-function getDependents(trickId) {
-  const result = [];
-  const queue  = [trickId];
-  while (queue.length) {
-    const current = queue.shift();
-    TRICKS_DATA.forEach(t => {
-      if (t.prereq === current && !result.includes(t.id)) {
-        result.push(t.id);
-        queue.push(t.id);
-      }
-    });
-  }
-  return result;
-}
-
-/**
- * Count mastered tricks.
+ * Count how many tricks are mastered.
+ * @returns {number}
  */
 function countMastered() {
-  return Object.values(state.trickStatus).filter(s => s === 'mastered').length;
-}
-
-// ============================================================
-// 5. GAME LOGIC — Combo Generator
-// ============================================================
-
-/**
- * Get available tricks (unlocked OR mastered), excluding 'Bind' from the
- * random pool (Bind is always appended at the end for realism).
- * @returns {string[]} array of trick ids
- */
-function getAvailableTrickIds() {
-  return TRICKS_DATA
-    .filter(t => t.id !== 'bind' && (state.trickStatus[t.id] === 'unlocked' || state.trickStatus[t.id] === 'mastered'))
-    .map(t => t.id);
-}
-
-/**
- * Generate a random combo of 3–4 tricks from available pool + Bind at end.
- * Returns null if pool has fewer than 3 tricks.
- * @returns {string[]|null}
- */
-function generateCombo() {
-  const pool = getAvailableTrickIds();
-  if (pool.length < 3) return null;
-
-  // Shuffle Fisher-Yates
-  const shuffled = [...pool];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-
-  // Pick 3 or 4 (randomly choose count)
-  const count = pool.length >= 4 && Math.random() > 0.4 ? 4 : 3;
-  const combo = shuffled.slice(0, count);
-
-  // Always end with Bind if Bind is available
-  const bindStatus = state.trickStatus['bind'];
-  if (bindStatus === 'unlocked' || bindStatus === 'mastered') {
-    combo.push('bind');
-  }
-
-  return combo;
-}
-
-// ============================================================
-// 6. DOM HELPERS
-// ============================================================
-
-/** Get element by id (shorthand) */
-const $ = id => document.getElementById(id);
-
-/** Difficulty label and dot color */
-function difficultyInfo(level) {
-  const labels = ['', 'Beginner', 'Easy', 'Intermediate', 'Hard', 'Expert'];
-  const colors  = ['', '#10B981', '#34D399', '#F59E0B', '#F97316', '#EF4444'];
-  return { label: labels[level] || 'Unknown', color: colors[level] || '#94a3b8' };
-}
-
-/** Build difficulty dot HTML */
-function difficultyDots(level) {
-  let html = '';
-  for (let i = 1; i <= 5; i++) {
-    const filled = i <= level;
-    const info   = difficultyInfo(level);
-    html += `<span class="diff-dot" style="background:${filled ? info.color : '#1e293b'}; border: 1px solid ${filled ? info.color : '#334155'};"></span>`;
-  }
-  return html;
+  return Object.values(STATE.tricks).filter((s) => s === 'mastered').length;
 }
 
 /**
  * Show a toast notification.
  * @param {string} message
- * @param {'success'|'error'|'info'} type
- * @param {string} icon  – emoji icon
+ * @param {'violet'|'emerald'} [accent='violet']
  */
-let toastTimer = null;
-function showToast(message, type = 'info', icon = 'ℹ️') {
-  const toast      = $('toast');
-  const toastInner = $('toast-inner');
-  const toastMsg   = $('toast-msg');
-  const toastIcon  = $('toast-icon');
-
-  toastMsg.textContent  = message;
-  toastIcon.textContent = icon;
-
-  // Reset classes
-  toastInner.className = 'glass-card rounded-xl px-5 py-3 text-sm font-semibold flex items-center gap-3 shadow-xl';
-  toastInner.classList.add(`toast-${type}`);
-
+function showToast(message, accent = 'violet') {
+  const toast = document.getElementById('toast');
+  toast.textContent = message;
+  toast.className = 'toast';
+  if (accent === 'emerald') toast.classList.add('toast-emerald');
   toast.classList.remove('hidden');
+
+  // Re-trigger animation by forcing reflow
+  void toast.offsetWidth;
   toast.style.animation = 'none';
-  // Force reflow
   void toast.offsetWidth;
   toast.style.animation = '';
 
-  if (toastTimer) clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => {
-    toast.classList.add('hidden');
-  }, 3000);
-}
-
-// ============================================================
-// 7. RENDER — Player Profile
-// ============================================================
-
-function renderProfile() {
-  const { xp, level } = state.player;
-  const mastered       = countMastered();
-  const { current, needed, fraction } = xpProgress();
-  const maxLvl = LEVEL_THRESHOLDS.length;
-  const title  = PLAYER_TITLES[Math.min(level - 1, PLAYER_TITLES.length - 1)];
-
-  $('player-level').textContent    = level;
-  $('player-xp').textContent       = xp;
-  $('player-mastered').textContent  = mastered;
-  $('player-title').textContent    = title;
-
-  const xpLabel = level >= maxLvl
-    ? 'MAX LEVEL'
-    : `${current} / ${needed} XP to next level`;
-  $('xp-progress-label').textContent = xpLabel;
-
-  const bar = $('xp-bar');
-  bar.style.width = `${Math.round(fraction * 100)}%`;
-
-  const wrapper = $('xp-bar-wrapper');
-  wrapper.setAttribute('aria-valuenow', Math.round(fraction * 100));
-}
-
-// ============================================================
-// 8. RENDER — Skill Tree
-// ============================================================
-
-function renderSkillTree() {
-  const grid = $('skill-grid');
-  grid.innerHTML = '';
-
-  TRICKS_DATA.forEach((trick, idx) => {
-    const status = state.trickStatus[trick.id] || 'locked';
-    const card   = buildTrickCard(trick, status, idx);
-    grid.appendChild(card);
-  });
-
-  // Progress summary
-  const total    = TRICKS_DATA.length;
-  const mastered = countMastered();
-  const unlocked = Object.values(state.trickStatus).filter(s => s === 'unlocked').length;
-  $('progress-summary').textContent = `${mastered}/${total} Mastered · ${unlocked} Available`;
+  clearTimeout(toast._hideTimer);
+  toast._hideTimer = setTimeout(() => toast.classList.add('hidden'), 3000);
 }
 
 /**
- * Build a trick card DOM element.
- * @param {Object} trick
- * @param {string} status  – 'locked' | 'unlocked' | 'mastered'
- * @param {number} idx     – for stagger delay
+ * Pick `count` random unique items from an array.
+ * @template T
+ * @param {T[]} arr
+ * @param {number} count
+ * @returns {T[]}
+ */
+function pickRandom(arr, count) {
+  const copy = [...arr];
+  const result = [];
+  for (let i = 0; i < Math.min(count, copy.length); i++) {
+    const idx = Math.floor(Math.random() * copy.length);
+    result.push(copy.splice(idx, 1)[0]);
+  }
+  return result;
+}
+
+/* ============================================================
+   PROFILE HUD — Level / XP display
+============================================================ */
+
+/**
+ * Refresh all elements in the player profile panel.
+ * @param {boolean} [leveledUp=false] - trigger level-up visual effect
+ */
+function renderProfile(leveledUp = false) {
+  const lvl = calcLevel(STATE.xp);
+  STATE.level = lvl;
+
+  document.getElementById('player-level').textContent = lvl;
+  document.getElementById('player-mastered').textContent = countMastered();
+  document.getElementById('player-xp').textContent = STATE.xp;
+
+  const { current, next, progress } = xpForNextLevel(STATE.xp);
+  document.getElementById('xp-bar-label').textContent = `${current} / ${next} XP`;
+  document.getElementById('xp-bar').style.width = `${(progress * 100).toFixed(1)}%`;
+
+  // XP bar pulse on change
+  const bar = document.getElementById('xp-bar');
+  bar.classList.remove('xp-pulse');
+  void bar.offsetWidth; // reflow
+  bar.classList.add('xp-pulse');
+
+  // Level-up avatar flash
+  if (leveledUp) {
+    const avatar = document.querySelector('#player-panel .w-14');
+    if (avatar) {
+      avatar.classList.remove('level-up-flash');
+      void avatar.offsetWidth;
+      avatar.classList.add('level-up-flash');
+    }
+  }
+}
+
+/**
+ * Add XP to state and update UI. Returns true if player leveled up.
+ * @param {number} amount
+ * @returns {boolean}
+ */
+function addXP(amount) {
+  const prevLevel = calcLevel(STATE.xp);
+  STATE.xp += amount;
+  const newLevel = calcLevel(STATE.xp);
+  const leveledUp = newLevel > prevLevel;
+  renderProfile(leveledUp);
+  if (leveledUp) {
+    showToast(`🎉 Level Up! You are now Level ${newLevel}!`, 'emerald');
+  }
+  return leveledUp;
+}
+
+/* ============================================================
+   SKILL TREE — Render & Interaction
+============================================================ */
+
+/** Reference to the trick card template element */
+const cardTemplate = document.getElementById('trick-card-template');
+
+/**
+ * Build star dots HTML for a difficulty rating.
+ * @param {number} difficulty - 1–5
+ * @param {TrickStatus} status
+ * @returns {DocumentFragment}
+ */
+function buildDifficultyDots(difficulty, status) {
+  const frag = document.createDocumentFragment();
+  for (let i = 1; i <= 5; i++) {
+    const dot = document.createElement('span');
+    dot.className = 'star-dot';
+    if (i <= difficulty) {
+      dot.classList.add(status === 'mastered' ? 'filled-mastered' : 'filled');
+    }
+    dot.setAttribute('aria-hidden', 'true');
+    frag.appendChild(dot);
+  }
+  return frag;
+}
+
+/**
+ * Create a trick card DOM element from a TrickDef.
+ * @param {TrickDef} trick
  * @returns {HTMLElement}
  */
-function buildTrickCard(trick, status, idx) {
-  const diff    = difficultyInfo(trick.difficulty);
-  const prereq  = trick.prereq ? TRICKS_DATA.find(t => t.id === trick.prereq) : null;
+function createTrickCard(trick) {
+  const status = STATE.tricks[trick.id];
+  const clone = cardTemplate.content.cloneNode(true);
+  const card = clone.querySelector('.trick-card');
 
-  // Status badge config
-  const badgeMap = {
-    locked:   { cls: 'badge-locked',   icon: '🔒', label: 'Locked'   },
-    unlocked: { cls: 'badge-unlocked', icon: '✅', label: 'Unlocked' },
-    mastered: { cls: 'badge-mastered', icon: '⭐', label: 'Mastered'  },
-  };
-  const badge = badgeMap[status];
+  // State class
+  card.classList.add(`state-${status}`);
+  card.dataset.trickId = trick.id;
+
+  // Content
+  card.querySelector('.trick-name').textContent = trick.name;
+  card.querySelector('.trick-category').textContent = trick.category;
+
+  // Difficulty dots
+  const diffContainer = card.querySelector('.trick-difficulty');
+  diffContainer.appendChild(buildDifficultyDots(trick.difficulty, status));
+  diffContainer.setAttribute('aria-label', `Difficulty: ${trick.difficulty} out of 5`);
+
+  // Prerequisite note
+  const prereqEl = card.querySelector('.trick-prereq');
+  if (trick.prereqs.length > 0) {
+    const prereqNames = trick.prereqs
+      .map((pid) => TRICKS_DATA.find((t) => t.id === pid)?.name ?? pid)
+      .join(', ');
+    prereqEl.textContent = `Requires: ${prereqNames}`;
+  } else {
+    prereqEl.textContent = 'No prerequisites';
+  }
+
+  // Status badge
+  const badge = card.querySelector('.trick-badge');
+  if (status === 'locked') {
+    badge.textContent = '🔒 Locked';
+    badge.classList.add('badge-locked');
+  } else if (status === 'unlocked') {
+    badge.textContent = '⚡ Unlocked';
+    badge.classList.add('badge-unlocked');
+  } else {
+    badge.textContent = '✅ Mastered';
+    badge.classList.add('badge-mastered');
+  }
 
   // Action button
-  let actionBtn = '';
-  if (status === 'unlocked') {
-    actionBtn = `<button class="btn-trick btn-trick-master" data-action="master" data-id="${trick.id}" aria-label="Set ${trick.name} as mastered">
-      ⚡ Set Mastered
-    </button>`;
-  } else if (status === 'mastered') {
-    actionBtn = `<button class="btn-trick btn-trick-reset" data-action="reset" data-id="${trick.id}" aria-label="Reset ${trick.name}">
-      ↩ Reset
-    </button>`;
+  const btn = card.querySelector('.trick-action-btn');
+  if (status === 'locked') {
+    btn.textContent = '🔒 Locked';
+    btn.disabled = true;
+    btn.setAttribute('aria-disabled', 'true');
+  } else if (status === 'unlocked') {
+    btn.textContent = `Set Mastered (+${trick.xpReward} XP)`;
+    btn.addEventListener('click', () => onSetMastered(trick.id));
   } else {
-    const prereqName = prereq ? prereq.name : '—';
-    actionBtn = `<button class="btn-trick btn-trick-locked" disabled aria-disabled="true" aria-label="${trick.name} is locked, requires ${prereqName}">
-      🔒 Requires: ${prereqName}
-    </button>`;
+    btn.textContent = '↩ Reset to Unlocked';
+    btn.addEventListener('click', () => onResetTrick(trick.id));
   }
 
-  const article = document.createElement('article');
-  article.className = `trick-card status-${status}`;
-  article.setAttribute('role', 'listitem');
-  article.setAttribute('aria-label', `${trick.name} — ${status}`);
-  article.style.animationDelay = `${idx * 0.04}s`;
-
-  article.innerHTML = `
-    <div class="flex items-start justify-between gap-2">
-      <h4 class="text-sm font-bold text-slate-100 leading-tight">${trick.name}</h4>
-      <span class="badge ${badge.cls} shrink-0">${badge.icon} ${badge.label}</span>
-    </div>
-    <div class="flex items-center gap-1.5 flex-wrap">
-      <span class="text-xs text-slate-500 bg-slate-800/60 px-2 py-0.5 rounded-md">${trick.category}</span>
-      <span class="text-xs font-semibold" style="color:${diff.color}">${diff.label}</span>
-    </div>
-    <div class="flex items-center gap-1" title="Difficulty ${trick.difficulty}/5" aria-label="Difficulty ${trick.difficulty} out of 5">
-      ${difficultyDots(trick.difficulty)}
-    </div>
-    <div class="text-xs text-slate-500 mt-0.5">
-      ${prereq
-        ? `Prereq: <span class="text-slate-400">${prereq.name}</span>`
-        : '<span class="text-emerald-500/70">No Prerequisite</span>'
-      }
-      <span class="ml-2 text-amber-400/80">+${trick.xpReward} XP</span>
-    </div>
-    ${actionBtn}
-  `;
-
-  return article;
+  return card;
 }
-
-// ============================================================
-// 9. RENDER — Combo Generator
-// ============================================================
 
 /**
- * Render the current combo into #combo-flow.
+ * Render the full trick grid (clears & rebuilds).
  */
-function renderCombo() {
-  const comboDisplay = $('combo-display');
-  const comboEmpty   = $('combo-empty');
-  const comboFlow    = $('combo-flow');
-
-  if (!state.currentCombo || state.currentCombo.length === 0) {
-    comboDisplay.classList.add('hidden');
-    comboEmpty.classList.add('hidden');
-    return;
-  }
-
-  comboDisplay.classList.remove('hidden');
-  comboEmpty.classList.add('hidden');
-  comboFlow.innerHTML = '';
-
-  state.currentCombo.forEach((trickId, idx) => {
-    const trick  = TRICKS_DATA.find(t => t.id === trickId);
-    const isBind = trickId === 'bind';
-    const status = state.trickStatus[trickId];
-
-    // Arrow between steps
-    if (idx > 0) {
-      const arrow = document.createElement('span');
-      arrow.className     = 'combo-arrow';
-      arrow.textContent   = '→';
-      arrow.setAttribute('aria-hidden', 'true');
-      comboFlow.appendChild(arrow);
-    }
-
-    const step = document.createElement('div');
-    step.className = `combo-step-card${isBind ? ' is-bind' : ''}`;
-    step.setAttribute('role', 'listitem');
-    step.setAttribute('aria-label', `Step ${idx + 1}: ${trick.name}`);
-    step.style.animationDelay = `${idx * 0.1}s`;
-
-    const stepNum = document.createElement('p');
-    stepNum.className   = 'text-xs font-bold mb-1';
-    stepNum.style.color = isBind ? '#34d399' : '#a78bfa';
-    stepNum.textContent = isBind ? 'FINISH' : `Step ${idx + 1}`;
-
-    const trickName = document.createElement('p');
-    trickName.className   = 'text-sm font-bold text-slate-100';
-    trickName.textContent = trick.name;
-
-    const trickCat = document.createElement('p');
-    trickCat.className   = 'text-xs text-slate-500 mt-1';
-    trickCat.textContent = trick.category;
-
-    // Status pill
-    const statusPill = document.createElement('span');
-    const isM = status === 'mastered';
-    statusPill.className   = `badge mt-2 ${isM ? 'badge-mastered' : 'badge-unlocked'}`;
-    statusPill.textContent = isM ? '⭐ Mastered' : '✅ Unlocked';
-
-    step.appendChild(stepNum);
-    step.appendChild(trickName);
-    step.appendChild(trickCat);
-    step.appendChild(statusPill);
-    comboFlow.appendChild(step);
+function renderSkillTree() {
+  const grid = document.getElementById('trick-grid');
+  grid.innerHTML = '';
+  TRICKS_DATA.forEach((trick) => {
+    grid.appendChild(createTrickCard(trick));
   });
-
-  // Update Complete Challenge button state
-  $('btn-complete-combo').disabled = state.comboCompleted;
-  if (state.comboCompleted) {
-    $('btn-complete-combo').textContent = '🏆 Challenge Completed!';
-    $('btn-complete-combo').style.opacity = '0.5';
-    $('btn-complete-combo').style.cursor  = 'not-allowed';
-  } else {
-    $('btn-complete-combo').textContent = '✅ Complete Challenge (+50 XP)';
-    $('btn-complete-combo').style.opacity = '';
-    $('btn-complete-combo').style.cursor  = '';
-  }
 }
 
-// ============================================================
-// 10. VIEW NAVIGATION
-// ============================================================
-
-function showView(viewName) {
-  const skillView = $('view-skill-tree');
-  const comboView = $('view-combo');
-  const navSkill  = $('nav-skill-tree');
-  const navCombo  = $('nav-combo');
-
-  if (viewName === 'skill-tree') {
-    skillView.classList.remove('hidden');
-    comboView.classList.add('hidden');
-    navSkill.classList.add('active-nav');
-    navSkill.setAttribute('aria-pressed', 'true');
-    navCombo.classList.remove('active-nav');
-    navCombo.setAttribute('aria-pressed', 'false');
-  } else {
-    comboView.classList.remove('hidden');
-    skillView.classList.add('hidden');
-    navCombo.classList.add('active-nav');
-    navCombo.setAttribute('aria-pressed', 'true');
-    navSkill.classList.remove('active-nav');
-    navSkill.setAttribute('aria-pressed', 'false');
-  }
-}
-
-// ============================================================
-// 11. EVENT HANDLERS
-// ============================================================
-
-/** Handle trick card action buttons (event delegation) */
-function handleSkillGridClick(e) {
-  const btn = e.target.closest('[data-action]');
-  if (!btn) return;
-
-  const action  = btn.dataset.action;
-  const trickId = btn.dataset.id;
-  const trick   = TRICKS_DATA.find(t => t.id === trickId);
+/**
+ * Handle "Set Mastered" click.
+ * @param {string} trickId
+ */
+function onSetMastered(trickId) {
+  if (STATE.tricks[trickId] !== 'unlocked') return;
+  const trick = TRICKS_DATA.find((t) => t.id === trickId);
   if (!trick) return;
 
-  if (action === 'master') {
-    const xpResult = masterTrick(trickId);
-    if (xpResult) {
-      renderSkillTree();
-      renderProfile();
-      if (xpResult.levelled) {
-        showToast(`🎉 LEVEL UP! You are now Level ${xpResult.newLevel}!`, 'success', '🎉');
-      } else {
-        showToast(`⭐ "${trick.name}" mastered! +${trick.xpReward} XP`, 'success', '⭐');
-      }
-    }
-  } else if (action === 'reset') {
-    const dependents = getDependents(trickId);
-    const masteredDeps = dependents.filter(id => state.trickStatus[id] === 'mastered');
-    resetTrick(trickId);
-    renderSkillTree();
-    renderProfile();
-    const resetMsg = masteredDeps.length > 0
-      ? `↩ "${trick.name}" reset. ${masteredDeps.length} dependent trick(s) also reset.`
-      : `↩ "${trick.name}" has been reset.`;
-    showToast(resetMsg, 'info', '↩️');
-  }
+  STATE.tricks[trickId] = 'mastered';
+  recomputeAllStatuses();
+
+  addXP(trick.xpReward);
+  renderSkillTree();
+  showToast(`🏆 "${trick.name}" mastered! +${trick.xpReward} XP`, 'violet');
 }
 
-/** Handle Generate Combo button */
-function handleGenerateCombo() {
-  const combo = generateCombo();
-  if (!combo) {
-    $('combo-display').classList.add('hidden');
-    $('combo-empty').classList.remove('hidden');
-    showToast('Not enough tricks! Master more tricks first.', 'error', '🔒');
-    return;
-  }
-  state.currentCombo    = combo;
-  state.comboCompleted  = false;
-  renderCombo();
-  showToast('New combo generated! Give it a try! 🎲', 'info', '🎲');
-}
+/**
+ * Handle "Reset" click — downgrade mastered trick back to unlocked,
+ * and re-lock any tricks that depended on it.
+ * @param {string} trickId
+ */
+function onResetTrick(trickId) {
+  if (STATE.tricks[trickId] !== 'mastered') return;
+  const trick = TRICKS_DATA.find((t) => t.id === trickId);
+  if (!trick) return;
 
-/** Handle Complete Challenge button */
-function handleCompleteChallenge() {
-  if (state.comboCompleted) return;
-  state.comboCompleted = true;
-  const xpResult = addXP(50);
-  renderProfile();
-  renderCombo(); // disable the button
-  if (xpResult.levelled) {
-    showToast(`🎉 LEVEL UP! You are now Level ${xpResult.newLevel}! +50 XP`, 'success', '🎉');
-  } else {
-    showToast('🏆 Challenge completed! +50 XP earned!', 'success', '🏆');
-  }
-}
+  // Deduct this trick's own XP reward (floor at 0)
+  STATE.xp = Math.max(0, STATE.xp - trick.xpReward);
 
-/** Handle Regenerate button */
-function handleRegenerateCombo() {
-  handleGenerateCombo();
-}
+  // Reset this trick to unlocked (it still meets its own prereqs)
+  STATE.tricks[trickId] = 'unlocked';
 
-// ============================================================
-// 12. BOOTSTRAP — Initialise Application
-// ============================================================
+  // Cascade-lock all direct and indirect dependents, deducting their XP too
+  cascadeLock(trickId);
 
-function init() {
-  // Load persisted or default state
-  loadState();
+  // Re-evaluate unlocked/locked for any remaining non-mastered tricks
+  recomputeAllStatuses();
 
-  // Ensure status integrity (handle stale saves)
-  recomputeStatuses();
-
-  // Initial renders
   renderProfile();
   renderSkillTree();
-
-  // --- Navigation ---
-  $('nav-skill-tree').addEventListener('click', () => showView('skill-tree'));
-  $('nav-combo').addEventListener('click',      () => showView('combo'));
-
-  // --- Skill Tree (event delegation on grid) ---
-  $('skill-grid').addEventListener('click', handleSkillGridClick);
-
-  // --- Combo Master ---
-  $('btn-generate-combo').addEventListener('click',  handleGenerateCombo);
-  $('btn-complete-combo').addEventListener('click',  handleCompleteChallenge);
-  $('btn-regenerate-combo').addEventListener('click', handleRegenerateCombo);
+  showToast(`↩ "${trick.name}" reset — dependents re-locked. XP adjusted.`, 'violet');
 }
 
-// Run once DOM is ready
+/* ============================================================
+   COMBO ENGINE — Generator & Challenge
+============================================================ */
+
+/** Tracks whether the current combo challenge has been completed */
+let comboCompleted = false;
+
+/**
+ * Collect only tricks with status 'mastered' (eligible for combo generation).
+ * 'Unlocked' tricks are excluded — the player must mark them mastered first.
+ * @returns {TrickDef[]}
+ */
+function getMasteredTricks() {
+  return TRICKS_DATA.filter((t) => STATE.tricks[t.id] === 'mastered');
+}
+
+/**
+ * Generate a combo: 3–4 random tricks from MASTERED-only pool + mandatory Bind.
+ * Bind is excluded from the main steps and always appended as the finishing move.
+ * @returns {TrickDef[]} — the selected tricks with Bind at the end
+ */
+function generateCombo() {
+  const mastered = getMasteredTricks();
+  // Exclude 'bind' from the selectable steps; it is the mandatory finish
+  const nonBind = mastered.filter((t) => t.id !== 'bind');
+  const count = nonBind.length >= 4 ? 4 : Math.min(3, nonBind.length);
+  const picked = pickRandom(nonBind, count);
+
+  // Always end with Bind (appended regardless of its mastery status)
+  const bindTrick = TRICKS_DATA.find((t) => t.id === 'bind');
+  if (bindTrick) picked.push(bindTrick);
+
+  return picked;
+}
+
+/**
+ * Render one combo step card.
+ * @param {TrickDef} trick
+ * @param {number} stepIndex - 0-based
+ * @param {boolean} isBind
+ * @returns {HTMLElement}
+ */
+function createComboStep(trick, stepIndex, isBind) {
+  const div = document.createElement('div');
+  div.className = 'combo-step' + (isBind ? ' bind-step' : '');
+  div.style.animationDelay = `${stepIndex * 0.08}s`;
+  div.setAttribute('role', 'listitem');
+
+  div.innerHTML = `
+    <p class="step-num">${isBind ? 'Finish' : `Step ${stepIndex + 1}`}</p>
+    <p class="step-name">${trick.name}</p>
+  `;
+  return div;
+}
+
+/**
+ * Render arrow separator between combo steps.
+ * @param {number} index - delay index
+ * @returns {HTMLElement}
+ */
+function createArrow(index) {
+  const span = document.createElement('span');
+  span.className = 'combo-arrow';
+  span.setAttribute('aria-hidden', 'true');
+  span.style.animationDelay = `${index * 0.08}s`;
+  span.textContent = '→';
+  return span;
+}
+
+/**
+ * Render the current combo into the combo flow container.
+ * @param {TrickDef[]} combo
+ */
+function renderComboFlow(combo) {
+  const flow = document.getElementById('combo-flow');
+  flow.innerHTML = '';
+
+  combo.forEach((trick, i) => {
+    const isBind = trick.id === 'bind';
+    const step = createComboStep(trick, i, isBind);
+    flow.appendChild(step);
+    if (i < combo.length - 1) {
+      flow.appendChild(createArrow(i));
+    }
+  });
+}
+
+/**
+ * Handle "Generate Daily Combo Challenge" button click.
+ */
+function onGenerateCombo() {
+  // Only mastered (non-bind) tricks are eligible for combo generation
+  const masteredNonBind = getMasteredTricks().filter((t) => t.id !== 'bind');
+  const comboDisplay = document.getElementById('combo-display');
+  const comboEmpty = document.getElementById('combo-empty');
+  const feedback = document.getElementById('combo-feedback');
+
+  if (masteredNonBind.length === 0) {
+    comboDisplay.classList.add('hidden');
+    comboEmpty.classList.remove('hidden');
+    return;
+  }
+
+  comboEmpty.classList.add('hidden');
+  comboDisplay.classList.remove('hidden');
+  feedback.classList.add('hidden');
+  feedback.textContent = '';
+
+  // Reset complete button state
+  const completeBtn = document.getElementById('btn-complete');
+  completeBtn.disabled = false;
+  completeBtn.classList.remove('opacity-40');
+  comboCompleted = false;
+
+  const combo = generateCombo();
+  // Store for completion handler
+  document.getElementById('combo-flow').dataset.comboJson = JSON.stringify(
+    combo.map((t) => t.id)
+  );
+
+  renderComboFlow(combo);
+}
+
+/**
+ * Handle "Complete Challenge" button click.
+ */
+function onCompleteChallenge() {
+  if (comboCompleted) return;
+  comboCompleted = true;
+
+  const completeBtn = document.getElementById('btn-complete');
+  completeBtn.disabled = true;
+
+  addXP(COMBO_CHALLENGE_XP);
+
+  const feedback = document.getElementById('combo-feedback');
+  feedback.textContent = `🎯 Challenge completed! +${COMBO_CHALLENGE_XP} XP earned.`;
+  feedback.className = 'mt-4 text-sm font-semibold text-neon-emerald';
+  feedback.classList.remove('hidden');
+
+  showToast(`🎯 Combo challenge complete! +${COMBO_CHALLENGE_XP} XP`, 'emerald');
+}
+
+/* ============================================================
+   TABS — Navigation
+============================================================ */
+
+/**
+ * Switch the visible view section.
+ * @param {'skilltree'|'combo'} viewId
+ */
+function switchTab(viewId) {
+  const views = document.querySelectorAll('.view-section');
+  views.forEach((v) => v.classList.add('hidden'));
+
+  const active = document.getElementById(`view-${viewId}`);
+  if (active) active.classList.remove('hidden');
+
+  const tabs = document.querySelectorAll('.tab-btn');
+  tabs.forEach((t) => {
+    const isActive = t.id === `tab-${viewId}`;
+    t.classList.toggle('active-tab', isActive);
+    t.setAttribute('aria-selected', String(isActive));
+  });
+}
+
+/* ============================================================
+   INIT — Bootstrap the application
+============================================================ */
+
+/**
+ * Initialise trick statuses from scratch.
+ * Tricks with no prereqs start as 'unlocked', rest as 'locked'.
+ */
+function initState() {
+  TRICKS_DATA.forEach((trick) => {
+    STATE.tricks[trick.id] = trick.prereqs.length === 0 ? 'unlocked' : 'locked';
+  });
+}
+
+/**
+ * Bind all static event listeners.
+ */
+function bindEvents() {
+  // Tab navigation
+  document.getElementById('tab-skilltree').addEventListener('click', () => switchTab('skilltree'));
+  document.getElementById('tab-combo').addEventListener('click', () => switchTab('combo'));
+
+  // Combo buttons
+  document.getElementById('btn-generate').addEventListener('click', onGenerateCombo);
+  document.getElementById('btn-complete').addEventListener('click', onCompleteChallenge);
+}
+
+/**
+ * Application entry point.
+ */
+function init() {
+  initState();
+  bindEvents();
+  renderProfile();
+  renderSkillTree();
+}
+
+// Start when DOM is ready
 document.addEventListener('DOMContentLoaded', init);
