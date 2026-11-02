@@ -288,6 +288,82 @@ html { scroll-behavior: smooth; }
 }
 .level-up-flash { animation: levelUpFlash 0.8s ease; }
 
+/* ── Combo step: starter variant ──────────────────────── */
+.combo-step.starter-step {
+  background: rgba(26, 20, 44, 0.9);
+  border-color: rgba(139, 92, 246, 0.45);
+}
+.combo-step.starter-step .step-num { color: #c4b5fd; }
+
+/* Step level sub-label */
+.combo-step .step-level {
+  font-size: 0.55rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #52525b;
+  margin-top: 2px;
+}
+
+/* ── Modal backdrop ────────────────────────────────────── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(9, 9, 11, 0.75);    /* zinc-950/75 */
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.2s ease both;
+}
+.modal-backdrop.hidden { display: none; }
+
+/* ── Modal panel ───────────────────────────────────────── */
+.modal-panel {
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: slideUp 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* ── Form elements ─────────────────────────────────────── */
+.form-label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #a1a1aa;
+  margin-bottom: 0.35rem;
+}
+.form-input {
+  width: 100%;
+  background: rgba(39, 39, 42, 0.9);
+  border: 1px solid rgba(63, 63, 70, 0.7);
+  border-radius: 0.5rem;
+  color: #f4f4f5;
+  font-size: 0.875rem;
+  padding: 0.45rem 0.75rem;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  font-family: inherit;
+}
+.form-input:focus {
+  border-color: rgba(139, 92, 246, 0.6);
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.18);
+}
+.form-input option {
+  background: #27272a;
+  color: #f4f4f5;
+}
+/* Multi-select height */
+select[multiple].form-input { padding: 0.25rem 0; }
+select[multiple].form-input option { padding: 0.3rem 0.75rem; }
+select[multiple].form-input option:checked {
+  background: rgba(139, 92, 246, 0.3);
+  color: #c4b5fd;
+}
+
 /* ── Scrollbar styling ─────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: #18181b; }

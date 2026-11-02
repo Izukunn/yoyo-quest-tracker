@@ -98,9 +98,14 @@
          TAB: SKILL TREE
     ============================================================ -->
     <section id="view-skilltree" aria-label="Skill Tree" class="view-section">
-      <div class="mb-6">
-        <h2 class="text-xl font-bold text-zinc-100">Skill Tree — 1A Division</h2>
-        <p class="text-sm text-zinc-400 mt-1">Master prerequisite tricks to unlock the next ones. Each mastered trick grants XP.</p>
+      <div class="mb-6 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 class="text-xl font-bold text-zinc-100">Skill Tree — 1A Division</h2>
+          <p class="text-sm text-zinc-400 mt-1">Master prerequisite tricks to unlock the next ones. Each mastered trick grants XP.</p>
+        </div>
+        <button id="btn-add-trick" class="btn-primary flex items-center gap-2 shrink-0">
+          <span aria-hidden="true">＋</span> Add Custom Trick
+        </button>
       </div>
       <!-- Trick grid — populated by JS -->
       <div id="trick-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" role="list" aria-label="Trick cards">
@@ -152,13 +157,106 @@
   ============================================================ -->
   <div id="toast" class="toast hidden" role="alert" aria-live="polite"></div>
 
+  <!-- ============================================================
+       CUSTOM TRICK CREATOR MODAL
+  ============================================================ -->
+  <div id="custom-modal"
+       class="modal-backdrop hidden"
+       role="dialog"
+       aria-modal="true"
+       aria-labelledby="modal-title"
+       aria-hidden="true">
+    <div class="modal-panel glass-panel rounded-xl p-6 w-full max-w-lg mx-4">
+
+      <!-- Header -->
+      <div class="flex items-center justify-between mb-5">
+        <h2 id="modal-title" class="text-base font-bold text-zinc-100 flex items-center gap-2">
+          <span aria-hidden="true">✨</span> Add Custom Trick
+        </h2>
+        <button id="btn-modal-close"
+          class="text-zinc-400 hover:text-zinc-100 transition-colors text-xl leading-none"
+          aria-label="Close modal">✕</button>
+      </div>
+
+      <!-- Form -->
+      <form id="custom-trick-form" novalidate>
+
+        <!-- Row 1: Name + Category -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label class="form-label" for="ct-name">Trick Name <span class="text-red-400">*</span></label>
+            <input id="ct-name" type="text" class="form-input" placeholder="e.g. Cold Fusion" maxlength="60" />
+          </div>
+          <div>
+            <label class="form-label" for="ct-category">Category</label>
+            <input id="ct-category" type="text" class="form-input" placeholder="e.g. Combo, Mount…" maxlength="40" />
+          </div>
+        </div>
+
+        <!-- Row 2: Level + Difficulty -->
+        <div class="grid grid-cols-2 gap-4 mb-4">
+          <div>
+            <label class="form-label" for="ct-level">Skill Level</label>
+            <select id="ct-level" class="form-input">
+              <option value="Beginner">Beginner</option>
+              <option value="Intermediate" selected>Intermediate</option>
+              <option value="Advanced">Advanced</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label" for="ct-difficulty">Difficulty (1–5)</label>
+            <input id="ct-difficulty" type="number" class="form-input" value="3" min="1" max="5" />
+          </div>
+        </div>
+
+        <!-- Row 3: Entry Mount + Exit Mount -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label class="form-label" for="ct-entry">Entry Mount</label>
+            <input id="ct-entry" type="text" class="form-input" placeholder="e.g. Trapeze" maxlength="40" />
+          </div>
+          <div>
+            <label class="form-label" for="ct-exit">Exit Mount</label>
+            <input id="ct-exit" type="text" class="form-input" placeholder="e.g. Double Trapeze" maxlength="40" />
+          </div>
+        </div>
+
+        <!-- Row 4: Prerequisites (multi-select) -->
+        <div class="mb-5">
+          <label class="form-label" for="ct-prereqs">
+            Prerequisites
+            <span class="text-zinc-500 font-normal">(hold Ctrl/⌘ to select multiple)</span>
+          </label>
+          <select id="ct-prereqs" class="form-input" multiple size="4"></select>
+        </div>
+
+        <!-- Error message -->
+        <p id="ct-error" class="text-red-400 text-xs mb-3 min-h-[1rem]"></p>
+
+        <!-- Actions -->
+        <div class="flex gap-3 justify-end">
+          <button type="button" id="btn-modal-cancel"
+            class="px-4 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:text-zinc-100 bg-zinc-800 hover:bg-zinc-700 transition-all">
+            Cancel
+          </button>
+          <button type="submit"
+            class="btn-primary px-5 py-2 text-sm">
+            Add Trick
+          </button>
+        </div>
+
+      </form>
+    </div>
+  </div>
+
   <!-- Trick Card Template (hidden, cloned by JS) -->
   <template id="trick-card-template">
     <article class="trick-card rounded-xl p-5 flex flex-col gap-3 transition-all duration-300" role="listitem">
       <div class="flex items-start justify-between gap-2">
-        <div>
+        <div class="flex-1 min-w-0">
           <h3 class="trick-name font-bold text-base text-zinc-100 leading-tight"></h3>
           <p class="trick-category text-xs text-zinc-400 mt-0.5"></p>
+          <!-- Level badge injected here by JS -->
         </div>
         <span class="trick-badge status-badge text-xs font-semibold px-2 py-0.5 rounded-full shrink-0"></span>
       </div>
@@ -166,8 +264,9 @@
         <span class="text-xs text-zinc-500">Difficulty:</span>
         <div class="trick-difficulty flex gap-1" aria-label="Difficulty stars"></div>
       </div>
+      <!-- Prereq + mount info injected by JS -->
       <p class="trick-prereq text-xs text-zinc-500"></p>
-      <div class="mt-auto">
+      <div class="mt-auto pt-1">
         <button class="trick-action-btn w-full py-2 px-3 rounded-lg text-sm font-semibold transition-all duration-200"></button>
       </div>
     </article>
