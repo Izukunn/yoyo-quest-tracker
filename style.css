@@ -1,0 +1,327 @@
+/* ===================================================
+   YoYo Quest Tracker & Combo Master — style.css
+   Custom animations, glassmorphism, neon UI effects
+   =================================================== */
+
+/* ---- Base font smoothing ---- */
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ---- Glassmorphism card ---- */
+.glass-card {
+  background: rgba(30, 27, 75, 0.45);
+  border: 1px solid rgba(139, 92, 246, 0.18);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+/* ---- Stat pill chip ---- */
+.stat-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: 0.75rem;
+  padding: 0.5rem 1.1rem;
+  min-width: 72px;
+}
+.stat-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+}
+.stat-value {
+  font-size: 1.35rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+/* ---- Navigation buttons ---- */
+.nav-btn {
+  background: transparent;
+  color: #94a3b8;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+.nav-btn:hover {
+  background: rgba(139, 92, 246, 0.12);
+  color: #a78bfa;
+  border-color: rgba(139, 92, 246, 0.25);
+}
+.nav-btn.active-nav {
+  background: rgba(139, 92, 246, 0.2);
+  color: #a78bfa;
+  border-color: rgba(139, 92, 246, 0.4);
+}
+
+/* ---- Primary button (violet neon) ---- */
+.btn-primary {
+  background: linear-gradient(135deg, #7C3AED 0%, #8B5CF6 100%);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  box-shadow: 0 0 18px rgba(139, 92, 246, 0.35);
+}
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 28px rgba(139, 92, 246, 0.55);
+}
+.btn-primary:active {
+  transform: translateY(0);
+}
+.btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* ---- Success button (emerald neon) ---- */
+.btn-success {
+  background: linear-gradient(135deg, #059669 0%, #10B981 100%);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 0 18px rgba(16, 185, 129, 0.35);
+}
+.btn-success:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 28px rgba(16, 185, 129, 0.55);
+}
+.btn-success:active {
+  transform: translateY(0);
+}
+
+/* ---- Ghost button ---- */
+.btn-ghost {
+  background: transparent;
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.btn-ghost:hover {
+  background: rgba(148, 163, 184, 0.1);
+  color: #cbd5e1;
+  border-color: rgba(148, 163, 184, 0.45);
+}
+
+/* ---- Trick Card ---- */
+.trick-card {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(51, 65, 85, 0.6);
+  border-radius: 0.875rem;
+  padding: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+.trick-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  border-radius: 0.875rem 0.875rem 0 0;
+  background: transparent;
+  transition: background 0.3s ease;
+}
+.trick-card.status-unlocked {
+  border-color: rgba(16, 185, 129, 0.35);
+}
+.trick-card.status-unlocked::before {
+  background: linear-gradient(90deg, #10B981, #34D399);
+}
+.trick-card.status-unlocked:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 30px rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.6);
+}
+.trick-card.status-mastered {
+  border-color: rgba(139, 92, 246, 0.45);
+}
+.trick-card.status-mastered::before {
+  background: linear-gradient(90deg, #8B5CF6, #A78BFA);
+}
+.trick-card.status-mastered:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 30px rgba(139, 92, 246, 0.25);
+  border-color: rgba(139, 92, 246, 0.7);
+}
+.trick-card.status-locked {
+  opacity: 0.55;
+  border-color: rgba(51, 65, 85, 0.4);
+}
+.trick-card.status-locked:hover {
+  opacity: 0.7;
+}
+
+/* ---- Status Badge ---- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.badge-locked {
+  background: rgba(71, 85, 105, 0.4);
+  color: #64748b;
+  border: 1px solid rgba(71, 85, 105, 0.4);
+}
+.badge-unlocked {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+.badge-mastered {
+  background: rgba(139, 92, 246, 0.2);
+  color: #a78bfa;
+  border: 1px solid rgba(139, 92, 246, 0.45);
+}
+
+/* ---- Difficulty dots ---- */
+.diff-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 2px;
+}
+
+/* ---- Trick action buttons ---- */
+.btn-trick {
+  width: 100%;
+  padding: 0.45rem 0;
+  border-radius: 0.6rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+  margin-top: 0.25rem;
+}
+.btn-trick-master {
+  background: linear-gradient(135deg, #059669, #10B981);
+  color: #fff;
+  box-shadow: 0 2px 12px rgba(16, 185, 129, 0.25);
+}
+.btn-trick-master:hover {
+  box-shadow: 0 4px 20px rgba(16, 185, 129, 0.45);
+  transform: translateY(-1px);
+}
+.btn-trick-reset {
+  background: transparent;
+  color: #a78bfa;
+  border-color: rgba(139, 92, 246, 0.35);
+}
+.btn-trick-reset:hover {
+  background: rgba(139, 92, 246, 0.1);
+  border-color: rgba(139, 92, 246, 0.6);
+}
+.btn-trick-locked {
+  background: rgba(51, 65, 85, 0.3);
+  color: #475569;
+  cursor: not-allowed;
+}
+
+/* ---- Combo Flow ---- */
+.combo-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+.combo-step-card {
+  background: rgba(30, 27, 75, 0.6);
+  border: 1.5px solid rgba(139, 92, 246, 0.4);
+  border-radius: 0.875rem;
+  padding: 0.9rem 1.1rem;
+  min-width: 120px;
+  text-align: center;
+  position: relative;
+  animation: slideInUp 0.35s ease both;
+}
+.combo-step-card:nth-child(1) { animation-delay: 0.05s; }
+.combo-step-card:nth-child(2) { animation-delay: 0.15s; }
+.combo-step-card:nth-child(3) { animation-delay: 0.25s; }
+.combo-step-card:nth-child(4) { animation-delay: 0.35s; }
+.combo-step-card:nth-child(5) { animation-delay: 0.45s; }
+
+.combo-step-card.is-bind {
+  border-color: rgba(16, 185, 129, 0.5);
+  background: rgba(5, 150, 105, 0.15);
+}
+
+.combo-arrow {
+  font-size: 1.4rem;
+  color: #475569;
+  line-height: 1;
+  padding: 0 0.2rem;
+  align-self: center;
+}
+
+/* ---- Toast ---- */
+.toast-container {
+  animation: slideInRight 0.3s ease;
+}
+.toast-success { border-color: rgba(16, 185, 129, 0.5) !important; }
+.toast-error   { border-color: rgba(239, 68, 68, 0.5) !important; }
+.toast-info    { border-color: rgba(139, 92, 246, 0.5) !important; }
+
+/* ===== Keyframes ===== */
+@keyframes slideInUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(30px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes pulse-neon {
+  0%, 100% { box-shadow: 0 0 12px rgba(139, 92, 246, 0.4); }
+  50%       { box-shadow: 0 0 26px rgba(139, 92, 246, 0.8); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ---- Entrance animation for trick cards ---- */
+.trick-card {
+  animation: fadeIn 0.3s ease both;
+}
+
+/* ---- Neon pulse for mastered card ---- */
+.trick-card.status-mastered {
+  animation: fadeIn 0.3s ease both, pulse-neon 3s ease-in-out infinite;
+}
+
+/* ---- Stagger delays for grid ---- */
+.trick-card:nth-child(1)  { animation-delay: 0.03s; }
+.trick-card:nth-child(2)  { animation-delay: 0.07s; }
+.trick-card:nth-child(3)  { animation-delay: 0.11s; }
+.trick-card:nth-child(4)  { animation-delay: 0.15s; }
+.trick-card:nth-child(5)  { animation-delay: 0.19s; }
+.trick-card:nth-child(6)  { animation-delay: 0.23s; }
+.trick-card:nth-child(7)  { animation-delay: 0.27s; }
+.trick-card:nth-child(8)  { animation-delay: 0.31s; }
+
+/* Scrollbar styling */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #0f172a; }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #475569; }
