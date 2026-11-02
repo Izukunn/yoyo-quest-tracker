@@ -1,50 +1,81 @@
 /**
- * YoYo Quest Tracker & Combo Master
- * script.js — Main application logic
+ * YoYo Quest Tracker & Combo Master  ·  script.js
  *
  * Architecture:
- *  - DATA          : built-in trick definitions (expandable via custom tricks)
- *  - STATE         : single source of truth (persisted in localStorage)
- *  - UTILS         : pure helpers
- *  - PROFILE HUD   : XP / Level display
- *  - SKILL TREE    : rendering + interaction
- *  - COMBO ENGINE  : generator + challenge logic (starter-throw rules)
- *  - CUSTOM TRICK  : modal form + localStorage persistence
- *  - TABS          : navigation
- *  - INIT          : bootstrap
+ *  DATA          — built-in + custom trick definitions
+ *  STATE         — single source of truth (localStorage-persisted)
+ *  UTILS         — pure helpers (sort, slugify, mount-chain, etc.)
+ *  PROFILE HUD   — XP / Level / Progress bar
+ *  SKILL TREE    — card render, smart sort, Edit / Delete interaction
+ *  COMBO ENGINE  — mount-aware generator + challenge
+ *  CUSTOM MODAL  — Add / Edit form with dropdown selects
+ *  CONFIRM MODAL — in-page confirm / error dialog (no window.alert)
+ *  TABS          — navigation
+ *  INIT          — bootstrap
  */
 
 'use strict';
 
 /* ============================================================
+   CONSTANTS — Standard dropdown options shared by data & UI
+============================================================ */
+
+/** Standard category options shown in the custom-trick form. */
+const CATEGORY_OPTIONS = [
+  'Foundational', 'Mount', 'String Trick', 'Combo',
+  'Essential', 'Slack', 'Whip', 'Regenerate', 'Custom',
+];
+
+/** Standard mount values — used for entry/exit dropdowns AND combo chaining. */
+const MOUNT_OPTIONS = [
+  'Hand',
+  'Spinning (neutral)',
+  'Side Mount',
+  'Front Mount',
+  'Trapeze',
+  'Double Trapeze',
+  'Double or Nothing',
+  'Hand (returned)',
+  'Return',
+  'Any',
+];
+
+/**
+ * Permanent trick IDs that cannot be deleted or have their ID changed.
+ * (Core learner-path anchors.)
+ */
+const PERMANENT_IDS = new Set([
+  'sleeper', 'breakaway', 'forward-pass', 'basic-bind',
+]);
+
+/* ============================================================
    DATA — Built-in Trick Definitions
-   Each trick has:
+   Fields:
      id, name, category, level, difficulty, prereqs, xpReward,
-     isStarter (true = throw opener, subject to placement rules),
-     isBind    (true = always the finishing step in a combo),
-     entryMount, exitMount, youtube_url
+     isStarter, isBind, entryMount, exitMount, youtube_url
 ============================================================ */
 
 /**
  * @typedef {Object} TrickDef
- * @property {string}   id          - Unique slug
- * @property {string}   name        - Display name
- * @property {string}   category    - Trick category
- * @property {'Beginner'|'Intermediate'|'Advanced'} level - Skill level
- * @property {number}   difficulty  - 1–5 star rating
- * @property {string[]} prereqs     - IDs that must be 'mastered' first
- * @property {number}   xpReward    - XP granted on mastery
- * @property {boolean}  isStarter   - True for throw-type openers
- * @property {boolean}  isBind      - True for bind-type finishing moves
- * @property {string}   entryMount  - Mount required to enter this trick
- * @property {string}   exitMount   - Mount state after completing this trick
- * @property {string}   youtube_url - Optional YouTube video link (future use)
- * @property {boolean}  [isCustom]  - True for user-created tricks
+ * @property {string}   id
+ * @property {string}   name
+ * @property {string}   category
+ * @property {'Beginner'|'Intermediate'|'Advanced'} level
+ * @property {number}   difficulty   1–5
+ * @property {string[]} prereqs
+ * @property {number}   xpReward
+ * @property {boolean}  isStarter    throw-type opener
+ * @property {boolean}  isBind       finishing bind move
+ * @property {string}   entryMount   required mount coming IN
+ * @property {string}   exitMount    mount state going OUT
+ * @property {string}   youtube_url
+ * @property {boolean}  [isCustom]
  */
 
 /** @type {TrickDef[]} */
 const BUILTIN_TRICKS = [
-  /* ── Beginner Starters (no prereqs, throw openers) ── */
+
+  /* ── Beginner Starters ───────────────────────────────── */
   {
     id: 'sleeper',
     name: 'Sleeper',
@@ -70,7 +101,7 @@ const BUILTIN_TRICKS = [
     isStarter: true,
     isBind: false,
     entryMount: 'Hand',
-    exitMount: 'Trapeze',
+    exitMount: 'Side Mount',      // ← fixed: Breakaway lands in Side Mount, not neutral
     youtube_url: '',
   },
   {
@@ -88,7 +119,7 @@ const BUILTIN_TRICKS = [
     youtube_url: '',
   },
 
-  /* ── Beginner Tricks ── */
+  /* ── Beginner Tricks ─────────────────────────────────── */
   {
     id: 'rock-the-baby',
     name: 'Rock the Baby',
@@ -128,7 +159,7 @@ const BUILTIN_TRICKS = [
     isStarter: false,
     isBind: false,
     entryMount: 'Spinning (neutral)',
-    exitMount: 'Return',
+    exitMount: 'Hand (returned)',
     youtube_url: '',
   },
   {
@@ -155,12 +186,12 @@ const BUILTIN_TRICKS = [
     xpReward: 75,
     isStarter: false,
     isBind: false,
-    entryMount: 'Breakaway',
+    entryMount: 'Side Mount',     // ← takes correct entry from Breakaway exit
     exitMount: 'Trapeze',
     youtube_url: '',
   },
 
-  /* ── Intermediate Tricks ── */
+  /* ── Intermediate Tricks ─────────────────────────────── */
   {
     id: 'brain-twister',
     name: 'Brain Twister',
@@ -204,28 +235,42 @@ const BUILTIN_TRICKS = [
     youtube_url: '',
   },
 
-  /* ── Bind moves — isBind: true ── */
+  /* ── Bind Hierarchy — isBind: true ──────────────────── */
   {
     id: 'basic-bind',
     name: 'Basic Bind',
     category: 'Essential',
     level: 'Beginner',
     difficulty: 2,
-    prereqs: ['front-mount'],   // reachable early via Sleeper -> Front Mount
+    prereqs: ['front-mount'],   // Sleeper → Front Mount → Basic Bind
     xpReward: 75,
     isStarter: false,
     isBind: true,
-    entryMount: 'Front Mount / Trapeze',
+    entryMount: 'Front Mount',
+    exitMount: 'Hand (returned)',
+    youtube_url: '',
+  },
+  {
+    id: 'side-bind',
+    name: 'Side Bind',
+    category: 'Essential',
+    level: 'Beginner',
+    difficulty: 2,
+    prereqs: ['breakaway'],     // Breakaway → Side Bind
+    xpReward: 75,
+    isStarter: false,
+    isBind: true,
+    entryMount: 'Side Mount',
     exitMount: 'Hand (returned)',
     youtube_url: '',
   },
   {
     id: 'bind',
-    name: 'Bind (Trapeze)',
+    name: 'Trapeze Bind',
     category: 'Essential',
     level: 'Intermediate',
     difficulty: 2,
-    prereqs: ['trapeze'],
+    prereqs: ['trapeze'],       // Trapeze → Trapeze Bind
     xpReward: 75,
     isStarter: false,
     isBind: true,
@@ -236,284 +281,251 @@ const BUILTIN_TRICKS = [
 ];
 
 /* ============================================================
-   STATE — Single source of truth
+   STATE
 ============================================================ */
 
-/**
- * @typedef {'locked'|'unlocked'|'mastered'} TrickStatus
- * @typedef {Object} PlayerState
- * @property {number} xp       - Accumulated total XP
- * @property {number} level    - Current player level
- * @property {Object.<string, TrickStatus>} tricks - trick id -> status
- */
+/** @typedef {'locked'|'unlocked'|'mastered'} TrickStatus */
 
-/** Runtime trick list (built-in + custom merged). Mutated by addCustomTrick(). */
+/** Runtime trick list (builtin + custom). Rebuilt on init + custom add. */
 let TRICKS_DATA = [];
 
-/** @type {PlayerState} */
-const STATE = {
-  xp: 0,
-  level: 1,
-  tricks: {},
-};
+/** @type {{ xp:number, level:number, tricks:Object.<string,TrickStatus> }} */
+const STATE = { xp: 0, level: 1, tricks: {} };
 
-/** localStorage keys */
-const LS_STATE_KEY  = 'yoyoquest_state';
-const LS_CUSTOM_KEY = 'yoyoquest_custom_tricks';
-
-/* XP thresholds per level (index = level - 1) */
+const LS_STATE_KEY   = 'yoyoquest_state';
+const LS_CUSTOM_KEY  = 'yoyoquest_custom_tricks';
 const LEVEL_XP_TABLE = [0, 200, 500, 900, 1400, 2000, 2800, 3800, 5000];
+const COMBO_XP       = 50;
 
-/* XP for completing a combo challenge */
-const COMBO_CHALLENGE_XP = 50;
+/** ID of trick currently being edited (null when adding new). */
+let editingTrickId = null;
 
 /* ============================================================
-   LOCAL STORAGE — Persistence helpers
+   PERSISTENCE
 ============================================================ */
 
-/** Save current STATE (xp, level, tricks) to localStorage. */
 function persistState() {
-  try {
-    localStorage.setItem(LS_STATE_KEY, JSON.stringify({
-      xp: STATE.xp,
-      level: STATE.level,
-      tricks: STATE.tricks,
-    }));
-  } catch (_) { /* storage might be unavailable in some contexts */ }
+  try { localStorage.setItem(LS_STATE_KEY, JSON.stringify({ xp: STATE.xp, level: STATE.level, tricks: STATE.tricks })); } catch (_) {}
 }
-
-/** Save custom trick array to localStorage. */
-function persistCustomTricks(customs) {
-  try {
-    localStorage.setItem(LS_CUSTOM_KEY, JSON.stringify(customs));
-  } catch (_) {}
+function persistCustomTricks(arr) {
+  try { localStorage.setItem(LS_CUSTOM_KEY, JSON.stringify(arr)); } catch (_) {}
 }
-
-/** Load custom tricks from localStorage. Returns [] if none. */
 function loadCustomTricks() {
-  try {
-    const raw = localStorage.getItem(LS_CUSTOM_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch (_) { return []; }
+  try { const r = localStorage.getItem(LS_CUSTOM_KEY); return r ? JSON.parse(r) : []; } catch (_) { return []; }
 }
-
-/** Load player state from localStorage. Returns null if none saved. */
 function loadPersistedState() {
-  try {
-    const raw = localStorage.getItem(LS_STATE_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch (_) { return null; }
+  try { const r = localStorage.getItem(LS_STATE_KEY); return r ? JSON.parse(r) : null; } catch (_) { return null; }
 }
 
 /* ============================================================
-   UTILS — Pure helpers
+   UTILS
 ============================================================ */
 
-/**
- * Compute unlocked/locked status for a trick (never touches 'mastered').
- * A trick is unlocked only when ALL its prereqs are 'mastered'.
- * @param {TrickDef} trick
- * @returns {TrickStatus}
- */
 function computeStatus(trick) {
-  const allPrereqsMet = trick.prereqs.every(
-    (pid) => STATE.tricks[pid] === 'mastered'
-  );
-  return allPrereqsMet ? 'unlocked' : 'locked';
+  return trick.prereqs.every((pid) => STATE.tricks[pid] === 'mastered')
+    ? 'unlocked' : 'locked';
 }
 
-/**
- * Re-compute unlocked/locked for every non-mastered trick.
- */
 function recomputeAllStatuses() {
-  TRICKS_DATA.forEach((trick) => {
-    if (STATE.tricks[trick.id] !== 'mastered') {
-      STATE.tricks[trick.id] = computeStatus(trick);
-    }
+  TRICKS_DATA.forEach((t) => {
+    if (STATE.tricks[t.id] !== 'mastered') STATE.tricks[t.id] = computeStatus(t);
   });
 }
 
-/**
- * Recursively force-lock a trick and all its descendants.
- * Deducts xpReward for every mastered trick that gets locked.
- * @param {string} trickId
- * @param {Set<string>} [visited]
- */
 function cascadeLock(trickId, visited = new Set()) {
   if (visited.has(trickId)) return;
   visited.add(trickId);
-
-  const dependents = TRICKS_DATA.filter((t) => t.prereqs.includes(trickId));
-  dependents.forEach((dep) => {
-    if (STATE.tricks[dep.id] === 'mastered') {
-      STATE.xp = Math.max(0, STATE.xp - dep.xpReward);
-    }
+  TRICKS_DATA.filter((t) => t.prereqs.includes(trickId)).forEach((dep) => {
+    if (STATE.tricks[dep.id] === 'mastered') STATE.xp = Math.max(0, STATE.xp - dep.xpReward);
     STATE.tricks[dep.id] = 'locked';
     cascadeLock(dep.id, visited);
   });
 }
 
-/**
- * Calculate player level from total XP.
- * @param {number} xp
- * @returns {number}
- */
 function calcLevel(xp) {
-  let level = 1;
   for (let i = LEVEL_XP_TABLE.length - 1; i >= 0; i--) {
-    if (xp >= LEVEL_XP_TABLE[i]) { level = i + 1; break; }
+    if (xp >= LEVEL_XP_TABLE[i]) return i + 1;
   }
-  return level;
+  return 1;
 }
 
-/**
- * Return XP progress toward the next level.
- * @param {number} xp
- * @returns {{ current: number, next: number, progress: number }}
- */
 function xpForNextLevel(xp) {
-  const level = calcLevel(xp);
-  const currentThreshold = LEVEL_XP_TABLE[level - 1] ?? 0;
-  const nextThreshold    = LEVEL_XP_TABLE[level] ?? LEVEL_XP_TABLE[LEVEL_XP_TABLE.length - 1];
-  const delta    = nextThreshold - currentThreshold;
-  const earned   = xp - currentThreshold;
-  const progress = delta > 0 ? Math.min(earned / delta, 1) : 1;
-  return { current: earned, next: delta, progress };
+  const lv   = calcLevel(xp);
+  const cur  = LEVEL_XP_TABLE[lv - 1] ?? 0;
+  const nxt  = LEVEL_XP_TABLE[lv]     ?? LEVEL_XP_TABLE[LEVEL_XP_TABLE.length - 1];
+  const delta  = nxt - cur;
+  const earned = xp - cur;
+  return { current: earned, next: delta, progress: delta > 0 ? Math.min(earned / delta, 1) : 1 };
 }
 
-/** Count mastered tricks. */
 function countMastered() {
   return Object.values(STATE.tricks).filter((s) => s === 'mastered').length;
 }
 
-/**
- * Show a toast notification.
- * @param {string} message
- * @param {'violet'|'emerald'} [accent='violet']
- */
-function showToast(message, accent = 'violet') {
-  const toast = document.getElementById('toast');
-  toast.textContent = message;
-  toast.className = 'toast';
-  if (accent === 'emerald') toast.classList.add('toast-emerald');
-  toast.classList.remove('hidden');
-  void toast.offsetWidth;
-  toast.style.animation = 'none';
-  void toast.offsetWidth;
-  toast.style.animation = '';
-  clearTimeout(toast._hideTimer);
-  toast._hideTimer = setTimeout(() => toast.classList.add('hidden'), 3000);
-}
-
-/**
- * Pick `count` random unique items from an array.
- * @template T
- * @param {T[]} arr
- * @param {number} count
- * @returns {T[]}
- */
-function pickRandom(arr, count) {
-  const copy = [...arr];
-  const result = [];
-  for (let i = 0; i < Math.min(count, copy.length); i++) {
-    const idx = Math.floor(Math.random() * copy.length);
-    result.push(copy.splice(idx, 1)[0]);
-  }
-  return result;
-}
-
-/**
- * Generate a slug ID from a user-supplied name (lowercase, hyphenated).
- * Appends a short timestamp suffix to ensure uniqueness.
- * @param {string} name
- * @returns {string}
- */
 function slugify(name) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
     + '-' + Date.now().toString(36);
 }
 
-/* ============================================================
-   PROFILE HUD — Level / XP display
-============================================================ */
-
 /**
- * Refresh the player profile panel.
- * @param {boolean} [leveledUp=false]
+ * Smart sort order: mastered first, then unlocked, then locked.
+ * Within each tier, preserve original TRICKS_DATA insertion order.
+ * @param {TrickDef[]} tricks
+ * @returns {TrickDef[]}
  */
-function renderProfile(leveledUp = false) {
-  const lvl = calcLevel(STATE.xp);
-  STATE.level = lvl;
-
-  document.getElementById('player-level').textContent = lvl;
-  document.getElementById('player-mastered').textContent = countMastered();
-  document.getElementById('player-xp').textContent = STATE.xp;
-
-  const { current, next, progress } = xpForNextLevel(STATE.xp);
-  document.getElementById('xp-bar-label').textContent = `${current} / ${next} XP`;
-  document.getElementById('xp-bar').style.width = `${(progress * 100).toFixed(1)}%`;
-
-  const bar = document.getElementById('xp-bar');
-  bar.classList.remove('xp-pulse');
-  void bar.offsetWidth;
-  bar.classList.add('xp-pulse');
-
-  if (leveledUp) {
-    const avatar = document.querySelector('#player-panel .w-14');
-    if (avatar) {
-      avatar.classList.remove('level-up-flash');
-      void avatar.offsetWidth;
-      avatar.classList.add('level-up-flash');
-    }
-  }
+function sortedTricks(tricks) {
+  const priority = { mastered: 0, unlocked: 1, locked: 2 };
+  return [...tricks].sort((a, b) => {
+    const pa = priority[STATE.tricks[a.id]] ?? 2;
+    const pb = priority[STATE.tricks[b.id]] ?? 2;
+    return pa - pb;
+  });
 }
 
 /**
- * Add XP, persist, and refresh UI. Returns true if leveled up.
- * @param {number} amount
- * @returns {boolean}
+ * Given an array of mastered tricks and a starting trick,
+ * build the longest valid chain where each trick's entryMount
+ * matches the previous trick's exitMount.
+ * @param {TrickDef[]} pool     - candidate tricks (regular non-starter non-bind)
+ * @param {string}     startMount - exitMount of the opener / previous trick
+ * @param {number}     targetLen  - desired number of regular steps
+ * @returns {TrickDef[]}
  */
+function buildMountChain(pool, startMount, targetLen) {
+  const chain   = [];
+  let   current = startMount;
+  const used    = new Set();
+
+  for (let attempt = 0; attempt < targetLen; attempt++) {
+    // Prefer tricks whose entryMount matches, fall back to 'Any'
+    const compatible = pool.filter(
+      (t) => !used.has(t.id) && (t.entryMount === current || t.entryMount === 'Any')
+    );
+    if (compatible.length === 0) break;
+    const chosen = compatible[Math.floor(Math.random() * compatible.length)];
+    chain.push(chosen);
+    used.add(chosen.id);
+    current = chosen.exitMount;
+  }
+  return chain;
+}
+
+/* ============================================================
+   TOAST
+============================================================ */
+
+function showToast(msg, accent = 'violet') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className   = 'toast' + (accent === 'emerald' ? ' toast-emerald' : '');
+  el.classList.remove('hidden');
+  void el.offsetWidth;
+  el.style.animation = 'none';
+  void el.offsetWidth;
+  el.style.animation = '';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.add('hidden'), 3200);
+}
+
+/* ============================================================
+   CONFIRM / ERROR MODAL  (replaces window.alert / window.confirm)
+============================================================ */
+
+/**
+ * Show the confirm modal.
+ * @param {Object} opts
+ * @param {string}   opts.title
+ * @param {string}   opts.message
+ * @param {string}   [opts.confirmLabel='Confirm']
+ * @param {'danger'|'violet'} [opts.kind='violet']
+ * @param {function} [opts.onConfirm]  called if user clicks Confirm
+ * @param {boolean}  [opts.alertOnly]  show only OK button (no cancel)
+ */
+function showConfirmModal({ title, message, confirmLabel = 'Confirm', kind = 'violet', onConfirm, alertOnly = false }) {
+  const modal  = document.getElementById('confirm-modal');
+  const ttl    = document.getElementById('cm-title');
+  const msg    = document.getElementById('cm-message');
+  const btnOk  = document.getElementById('cm-ok');
+  const btnCnl = document.getElementById('cm-cancel');
+
+  ttl.textContent = title;
+  msg.textContent = message;
+  btnOk.textContent = confirmLabel;
+  btnOk.className = 'cm-btn ' + (kind === 'danger' ? 'cm-btn-danger' : 'cm-btn-violet');
+
+  btnCnl.classList.toggle('hidden', !!alertOnly);
+
+  // Remove old listeners by replacing the button node
+  const newOk = btnOk.cloneNode(true);
+  btnOk.parentNode.replaceChild(newOk, btnOk);
+
+  newOk.addEventListener('click', () => {
+    closeConfirmModal();
+    if (onConfirm) onConfirm();
+  });
+
+  modal.classList.remove('hidden');
+  modal.setAttribute('aria-hidden', 'false');
+  newOk.focus();
+}
+
+function closeConfirmModal() {
+  const modal = document.getElementById('confirm-modal');
+  modal.classList.add('hidden');
+  modal.setAttribute('aria-hidden', 'true');
+}
+
+/* ============================================================
+   PROFILE HUD
+============================================================ */
+
+function renderProfile(leveledUp = false) {
+  const lvl = calcLevel(STATE.xp);
+  STATE.level = lvl;
+  document.getElementById('player-level').textContent    = lvl;
+  document.getElementById('player-mastered').textContent = countMastered();
+  document.getElementById('player-xp').textContent       = STATE.xp;
+  const { current, next, progress } = xpForNextLevel(STATE.xp);
+  document.getElementById('xp-bar-label').textContent = `${current} / ${next} XP`;
+  const bar = document.getElementById('xp-bar');
+  bar.style.width = `${(progress * 100).toFixed(1)}%`;
+  bar.classList.remove('xp-pulse');
+  void bar.offsetWidth;
+  bar.classList.add('xp-pulse');
+  if (leveledUp) {
+    const av = document.querySelector('#player-panel .w-14');
+    if (av) { av.classList.remove('level-up-flash'); void av.offsetWidth; av.classList.add('level-up-flash'); }
+  }
+}
+
 function addXP(amount) {
-  const prevLevel = calcLevel(STATE.xp);
-  STATE.xp += amount;
-  const newLevel = calcLevel(STATE.xp);
-  const leveledUp = newLevel > prevLevel;
+  const prev = calcLevel(STATE.xp);
+  STATE.xp  += amount;
+  const next  = calcLevel(STATE.xp);
   persistState();
-  renderProfile(leveledUp);
-  if (leveledUp) showToast(`🎉 Level Up! You are now Level ${newLevel}!`, 'emerald');
-  return leveledUp;
+  renderProfile(next > prev);
+  if (next > prev) showToast(`🎉 Level Up! You are now Level ${next}!`, 'emerald');
 }
 
 /* ============================================================
    SKILL TREE — Render & Interaction
 ============================================================ */
 
-/** Reference to the trick card template */
 const cardTemplate = document.getElementById('trick-card-template');
 
-/** Level badge colour map */
 const LEVEL_BADGE = {
-  Beginner:     { bg: 'rgba(59,130,246,0.18)', color: '#93c5fd', border: 'rgba(59,130,246,0.35)' },
-  Intermediate: { bg: 'rgba(234,179,8,0.18)',  color: '#fde047', border: 'rgba(234,179,8,0.35)' },
-  Advanced:     { bg: 'rgba(239,68,68,0.18)',  color: '#fca5a5', border: 'rgba(239,68,68,0.35)' },
+  Beginner:     { bg: 'rgba(59,130,246,0.18)',  color: '#93c5fd', border: 'rgba(59,130,246,0.35)' },
+  Intermediate: { bg: 'rgba(234,179,8,0.18)',   color: '#fde047', border: 'rgba(234,179,8,0.35)' },
+  Advanced:     { bg: 'rgba(239,68,68,0.18)',   color: '#fca5a5', border: 'rgba(239,68,68,0.35)' },
 };
 
-/**
- * Build difficulty dot spans.
- * @param {number} difficulty
- * @param {TrickStatus} status
- * @returns {DocumentFragment}
- */
-function buildDifficultyDots(difficulty, status) {
+function buildDifficultyDots(diff, status) {
   const frag = document.createDocumentFragment();
   for (let i = 1; i <= 5; i++) {
-    const dot = document.createElement('span');
-    dot.className = 'star-dot';
-    if (i <= difficulty) {
-      dot.classList.add(status === 'mastered' ? 'filled-mastered' : 'filled');
-    }
-    dot.setAttribute('aria-hidden', 'true');
-    frag.appendChild(dot);
+    const d = document.createElement('span');
+    d.className = 'star-dot' + (i <= diff ? (' ' + (status === 'mastered' ? 'filled-mastered' : 'filled')) : '');
+    d.setAttribute('aria-hidden', 'true');
+    frag.appendChild(d);
   }
   return frag;
 }
@@ -524,269 +536,327 @@ function buildDifficultyDots(difficulty, status) {
  * @returns {HTMLElement}
  */
 function createTrickCard(trick) {
-  const status = STATE.tricks[trick.id];
-  const clone  = cardTemplate.content.cloneNode(true);
-  const card   = clone.querySelector('.trick-card');
+  const status  = STATE.tricks[trick.id];
+  const clone   = cardTemplate.content.cloneNode(true);
+  const card    = clone.querySelector('.trick-card');
+  const isPerm  = PERMANENT_IDS.has(trick.id);
 
   card.classList.add(`state-${status}`);
   card.dataset.trickId = trick.id;
 
-  // Name + category
+  /* ── Name + category ── */
   card.querySelector('.trick-name').textContent = trick.name;
   card.querySelector('.trick-category').textContent =
     trick.category + (trick.isCustom ? ' ★' : '');
 
-  // Level badge (injected after category)
-  const lbConf = LEVEL_BADGE[trick.level] ?? LEVEL_BADGE.Beginner;
-  const levelEl = document.createElement('span');
-  levelEl.className = 'trick-level-badge';
-  levelEl.textContent = trick.level;
-  levelEl.style.cssText = `
-    display:inline-block;
-    font-size:0.6rem;font-weight:700;
-    text-transform:uppercase;letter-spacing:0.07em;
-    padding:1px 7px;border-radius:999px;margin-top:3px;
-    background:${lbConf.bg};color:${lbConf.color};
-    border:1px solid ${lbConf.border};
-  `;
-  card.querySelector('.trick-category').after(levelEl);
+  /* ── Level badge ── */
+  const lbc = LEVEL_BADGE[trick.level] ?? LEVEL_BADGE.Beginner;
+  const lvlEl = document.createElement('span');
+  lvlEl.textContent = trick.level;
+  lvlEl.style.cssText = `display:inline-block;font-size:0.6rem;font-weight:700;
+    text-transform:uppercase;letter-spacing:0.07em;padding:1px 7px;
+    border-radius:999px;margin-top:3px;background:${lbc.bg};
+    color:${lbc.color};border:1px solid ${lbc.border};`;
+  card.querySelector('.trick-category').after(lvlEl);
 
-  // Difficulty dots
-  const diffContainer = card.querySelector('.trick-difficulty');
-  diffContainer.appendChild(buildDifficultyDots(trick.difficulty, status));
-  diffContainer.setAttribute('aria-label', `Difficulty: ${trick.difficulty} out of 5`);
+  /* ── Difficulty dots ── */
+  const diffEl = card.querySelector('.trick-difficulty');
+  diffEl.appendChild(buildDifficultyDots(trick.difficulty, status));
+  diffEl.setAttribute('aria-label', `Difficulty: ${trick.difficulty} out of 5`);
 
-  // Prereq note
+  /* ── Prereq note ── */
   const prereqEl = card.querySelector('.trick-prereq');
   if (trick.prereqs.length > 0) {
-    const names = trick.prereqs
-      .map((pid) => TRICKS_DATA.find((t) => t.id === pid)?.name ?? pid)
-      .join(', ');
-    prereqEl.textContent = `Requires: ${names}`;
+    prereqEl.textContent = 'Requires: ' + trick.prereqs
+      .map((pid) => TRICKS_DATA.find((t) => t.id === pid)?.name ?? pid).join(', ');
   } else {
     prereqEl.textContent = 'No prerequisites';
   }
 
-  // Entry/exit mount (show for all tricks that have them)
+  /* ── Mount info ── */
   if (trick.entryMount || trick.exitMount) {
-    const mountEl = document.createElement('p');
-    mountEl.className = 'trick-mount-info';
-    mountEl.style.cssText = 'font-size:0.6rem;color:#71717a;margin-top:-4px;';
+    const mEl = document.createElement('p');
+    mEl.style.cssText = 'font-size:0.6rem;color:#71717a;margin-top:-2px;';
     const parts = [];
     if (trick.entryMount) parts.push(`In: ${trick.entryMount}`);
     if (trick.exitMount)  parts.push(`Out: ${trick.exitMount}`);
-    mountEl.textContent = parts.join(' · ');
-    prereqEl.after(mountEl);
+    mEl.textContent = parts.join(' · ');
+    prereqEl.after(mEl);
   }
 
-  // Status badge
+  /* ── Overlay tags (Bind / Starter / Custom) ── */
+  if (trick.isBind || trick.isStarter) {
+    const tag = document.createElement('span');
+    if (trick.isBind) {
+      tag.textContent = '🔗 Bind';
+      tag.style.cssText = 'position:absolute;top:8px;left:8px;font-size:0.55rem;font-weight:700;text-transform:uppercase;padding:2px 6px;border-radius:999px;background:rgba(16,185,129,0.15);color:#34d399;border:1px solid rgba(16,185,129,0.3);';
+    } else {
+      tag.textContent = '🚀 Starter';
+      tag.style.cssText = 'position:absolute;top:8px;left:8px;font-size:0.55rem;font-weight:700;text-transform:uppercase;padding:2px 6px;border-radius:999px;background:rgba(139,92,246,0.15);color:#a78bfa;border:1px solid rgba(139,92,246,0.3);';
+    }
+    card.appendChild(tag);
+  }
+
+  /* ── Status badge ── */
   const badge = card.querySelector('.trick-badge');
   if (status === 'locked') {
-    badge.textContent = '🔒 Locked';
-    badge.classList.add('badge-locked');
+    badge.textContent = '🔒 Locked'; badge.classList.add('badge-locked');
   } else if (status === 'unlocked') {
-    badge.textContent = '⚡ Unlocked';
-    badge.classList.add('badge-unlocked');
+    badge.textContent = '⚡ Unlocked'; badge.classList.add('badge-unlocked');
   } else {
-    badge.textContent = '✅ Mastered';
-    badge.classList.add('badge-mastered');
+    badge.textContent = '✅ Mastered'; badge.classList.add('badge-mastered');
   }
 
-  // Bind badge overlay
-  if (trick.isBind) {
-    const bindTag = document.createElement('span');
-    bindTag.textContent = '🔗 Bind';
-    bindTag.style.cssText = `
-      position:absolute;top:8px;left:8px;
-      font-size:0.55rem;font-weight:700;text-transform:uppercase;
-      padding:2px 6px;border-radius:999px;
-      background:rgba(16,185,129,0.15);color:#34d399;
-      border:1px solid rgba(16,185,129,0.3);
-    `;
-    card.style.position = 'relative';
-    card.appendChild(bindTag);
-  }
-
-  // Starter badge overlay
-  if (trick.isStarter) {
-    const startTag = document.createElement('span');
-    startTag.textContent = '🚀 Starter';
-    startTag.style.cssText = `
-      position:absolute;top:8px;left:8px;
-      font-size:0.55rem;font-weight:700;text-transform:uppercase;
-      padding:2px 6px;border-radius:999px;
-      background:rgba(139,92,246,0.15);color:#a78bfa;
-      border:1px solid rgba(139,92,246,0.3);
-    `;
-    card.style.position = 'relative';
-    card.appendChild(startTag);
-  }
-
-  // Action button
+  /* ── Primary action button ── */
   const btn = card.querySelector('.trick-action-btn');
   if (status === 'locked') {
     btn.textContent = '🔒 Locked';
-    btn.disabled = true;
+    btn.disabled    = true;
     btn.setAttribute('aria-disabled', 'true');
   } else if (status === 'unlocked') {
     btn.textContent = `Set Mastered (+${trick.xpReward} XP)`;
     btn.addEventListener('click', () => onSetMastered(trick.id));
   } else {
-    btn.textContent = '↩ Reset to Unlocked';
+    btn.textContent = '↩ Reset';
     btn.addEventListener('click', () => onResetTrick(trick.id));
+  }
+
+  /* ── Edit / Delete icon buttons (bottom-right of card) ── */
+  const cardActions = card.querySelector('.card-actions');
+  if (cardActions) {
+    // Edit button — always shown
+    const editBtn = document.createElement('button');
+    editBtn.className   = 'card-icon-btn edit-btn';
+    editBtn.title       = 'Edit trick';
+    editBtn.setAttribute('aria-label', `Edit ${trick.name}`);
+    editBtn.innerHTML   = '✏️';
+    editBtn.addEventListener('click', (e) => { e.stopPropagation(); onEditTrick(trick.id); });
+    cardActions.appendChild(editBtn);
+
+    // Delete button — hidden for permanent tricks
+    if (!isPerm) {
+      const delBtn = document.createElement('button');
+      delBtn.className = 'card-icon-btn delete-btn';
+      delBtn.title     = 'Delete trick';
+      delBtn.setAttribute('aria-label', `Delete ${trick.name}`);
+      delBtn.innerHTML = '🗑️';
+      delBtn.addEventListener('click', (e) => { e.stopPropagation(); onDeleteTrick(trick.id); });
+      cardActions.appendChild(delBtn);
+    }
   }
 
   return card;
 }
 
 /**
- * Render (or re-render) the full trick grid.
+ * Render the full trick grid with smart sorting applied.
  */
 function renderSkillTree() {
   const grid = document.getElementById('trick-grid');
   grid.innerHTML = '';
-  TRICKS_DATA.forEach((trick) => grid.appendChild(createTrickCard(trick)));
+  sortedTricks(TRICKS_DATA).forEach((trick) => grid.appendChild(createTrickCard(trick)));
 }
 
-/**
- * Handle "Set Mastered".
- * @param {string} trickId
- */
+/* ────────────────── Skill Tree Actions ────────────────── */
+
 function onSetMastered(trickId) {
   if (STATE.tricks[trickId] !== 'unlocked') return;
   const trick = TRICKS_DATA.find((t) => t.id === trickId);
   if (!trick) return;
-
   STATE.tricks[trickId] = 'mastered';
   recomputeAllStatuses();
   persistState();
-
   addXP(trick.xpReward);
   renderSkillTree();
   showToast(`🏆 "${trick.name}" mastered! +${trick.xpReward} XP`, 'violet');
 }
 
-/**
- * Handle "Reset" — cascades lock to all dependents.
- * @param {string} trickId
- */
 function onResetTrick(trickId) {
   if (STATE.tricks[trickId] !== 'mastered') return;
   const trick = TRICKS_DATA.find((t) => t.id === trickId);
   if (!trick) return;
-
   STATE.xp = Math.max(0, STATE.xp - trick.xpReward);
   STATE.tricks[trickId] = 'unlocked';
   cascadeLock(trickId);
   recomputeAllStatuses();
   persistState();
-
   renderProfile();
   renderSkillTree();
   showToast(`↩ "${trick.name}" reset — dependents re-locked. XP adjusted.`, 'violet');
 }
 
-/* ============================================================
-   COMBO ENGINE — Generator + Challenge
-   Starter-throw placement rules:
-     • isStarter tricks (Sleeper, Breakaway, Forward Pass) may ONLY appear:
-         1. As the very first trick of the sequence, OR
-         2. Immediately after a Bind step.
-     • Two starters may NOT appear back-to-back.
-     • isBind tricks act as the mandatory finish of every combo.
-============================================================ */
+/**
+ * Handle Delete button — checks prereq safety, then confirms.
+ * @param {string} trickId
+ */
+function onDeleteTrick(trickId) {
+  if (PERMANENT_IDS.has(trickId)) {
+    showConfirmModal({
+      title: '🛡️ Protected Trick',
+      message: 'This trick is a core foundation and cannot be deleted.',
+      confirmLabel: 'OK',
+      alertOnly: true,
+    });
+    return;
+  }
 
-/** Tracks if the current challenge has been claimed. */
-let comboCompleted = false;
+  // Check if any OTHER trick depends on this one
+  const dependents = TRICKS_DATA.filter(
+    (t) => t.id !== trickId && t.prereqs.includes(trickId)
+  );
+  if (dependents.length > 0) {
+    const names = dependents.map((t) => `"${t.name}"`).join(', ');
+    showConfirmModal({
+      title: '⚠️ Cannot Delete',
+      message: `"${TRICKS_DATA.find((t) => t.id === trickId)?.name}" is a prerequisite for: ${names}. Remove or re-assign those tricks first.`,
+      confirmLabel: 'OK',
+      alertOnly: true,
+    });
+    return;
+  }
+
+  const trick = TRICKS_DATA.find((t) => t.id === trickId);
+  showConfirmModal({
+    title: '🗑️ Delete Trick',
+    message: `Are you sure you want to delete "${trick?.name}"? This cannot be undone.`,
+    confirmLabel: 'Delete',
+    kind: 'danger',
+    onConfirm: () => executeDeleteTrick(trickId),
+  });
+}
 
 /**
- * Return all mastered tricks (eligible for combo generation).
- * @returns {TrickDef[]}
+ * Actually remove the trick from TRICKS_DATA, STATE, and localStorage.
+ * @param {string} trickId
  */
+function executeDeleteTrick(trickId) {
+  // Deduct XP if it was mastered
+  const trick = TRICKS_DATA.find((t) => t.id === trickId);
+  if (trick && STATE.tricks[trickId] === 'mastered') {
+    STATE.xp = Math.max(0, STATE.xp - trick.xpReward);
+  }
+  // Remove from live array
+  TRICKS_DATA = TRICKS_DATA.filter((t) => t.id !== trickId);
+  // Remove from STATE
+  delete STATE.tricks[trickId];
+  // Update custom tricks in localStorage (only custom tricks are stored there)
+  const customs = loadCustomTricks().filter((t) => t.id !== trickId);
+  persistCustomTricks(customs);
+  persistState();
+  renderProfile();
+  renderSkillTree();
+  showToast(`🗑️ "${trick?.name ?? trickId}" deleted.`, 'violet');
+}
+
+/**
+ * Open the modal pre-filled for editing an existing trick.
+ * @param {string} trickId
+ */
+function onEditTrick(trickId) {
+  const trick = TRICKS_DATA.find((t) => t.id === trickId);
+  if (!trick) return;
+  editingTrickId = trickId;
+
+  populateModalDropdowns();
+  populatePrereqSelect(trickId);
+
+  // Pre-fill fields
+  document.getElementById('ct-name').value       = trick.name;
+  document.getElementById('ct-category').value   = trick.category;
+  document.getElementById('ct-level').value      = trick.level;
+  document.getElementById('ct-entry').value      = trick.entryMount;
+  document.getElementById('ct-exit').value       = trick.exitMount;
+  document.getElementById('ct-difficulty').value = trick.difficulty;
+
+  // Pre-select prereqs
+  const sel = document.getElementById('ct-prereqs');
+  Array.from(sel.options).forEach((opt) => {
+    opt.selected = trick.prereqs.includes(opt.value);
+  });
+
+  // Disable name field for permanent tricks
+  const nameInput = document.getElementById('ct-name');
+  nameInput.disabled = PERMANENT_IDS.has(trickId);
+
+  // Update modal title & submit label
+  document.getElementById('modal-title-text').textContent = '✏️ Edit Trick';
+  document.getElementById('btn-modal-submit').textContent = 'Save Changes';
+
+  openCustomModal();
+}
+
+/* ============================================================
+   COMBO ENGINE
+   Rules:
+   • Only MASTERED tricks enter the pool.
+   • Starters (isStarter) only at position 0.
+   • Regular tricks chained by entryMount ↔ exitMount.
+   • Bind appended last.
+============================================================ */
+
+let comboCompleted = false;
+
 function getMasteredTricks() {
   return TRICKS_DATA.filter((t) => STATE.tricks[t.id] === 'mastered');
 }
 
 /**
- * Build a valid combo sequence respecting starter-throw rules.
- *
- * Algorithm:
- *  1. Split mastered tricks into: starters, regular, binds.
- *  2. Pick ONE starter for slot 0.
- *  3. Fill 2–3 more slots with regular (non-starter, non-bind) tricks.
- *  4. Append a bind trick as the mandatory finish.
- *
- * If no bind is mastered, the combo ends without one (edge case).
- *
+ * Generate a mount-aware combo sequence.
  * @returns {TrickDef[]}
  */
 function generateCombo() {
-  const mastered  = getMasteredTricks();
-  const starters  = mastered.filter((t) => t.isStarter);
-  const regulars  = mastered.filter((t) => !t.isStarter && !t.isBind);
-  const binds     = mastered.filter((t) => t.isBind);
+  const mastered = getMasteredTricks();
+  const starters = mastered.filter((t) => t.isStarter);
+  const regulars = mastered.filter((t) => !t.isStarter && !t.isBind);
+  const binds    = mastered.filter((t) => t.isBind);
 
   const combo = [];
 
-  /* ── Step 1: pick a starter for position 0 ── */
+  /* Step 0 — pick one starter as the opener */
+  let openerExit = 'Any';
   if (starters.length > 0) {
-    combo.push(pickRandom(starters, 1)[0]);
+    const opener = starters[Math.floor(Math.random() * starters.length)];
+    combo.push(opener);
+    openerExit = opener.exitMount;
   }
 
-  /* ── Step 2: fill 2–3 regular trick slots ── */
-  const regularCount = regulars.length >= 3 ? 3 : Math.min(2, regulars.length);
-  const picked = pickRandom(regulars, regularCount);
-  combo.push(...picked);
+  /* Step 1 — build mount-compatible chain of 2–3 regulars */
+  const targetLen = regulars.length >= 3 ? 3 : Math.min(2, regulars.length);
+  const chain = buildMountChain(regulars, openerExit, targetLen);
+  combo.push(...chain);
 
-  /* ── Step 3: append a bind as the finishing move ── */
+  /* Step 2 — append a bind */
   if (binds.length > 0) {
-    combo.push(pickRandom(binds, 1)[0]);
+    combo.push(binds[Math.floor(Math.random() * binds.length)]);
   }
 
   return combo;
 }
 
-/**
- * Render a single combo step card.
- * @param {TrickDef} trick
- * @param {number} stepIndex
- * @returns {HTMLElement}
- */
-function createComboStep(trick, stepIndex) {
-  const isBindStep = trick.isBind;
+function createComboStep(trick, idx) {
+  const isBindStep  = trick.isBind;
+  const isStart     = trick.isStarter;
   const div = document.createElement('div');
-  div.className = 'combo-step' + (isBindStep ? ' bind-step' : '') +
-                  (trick.isStarter ? ' starter-step' : '');
-  div.style.animationDelay = `${stepIndex * 0.08}s`;
+  div.className  = 'combo-step' +
+    (isBindStep ? ' bind-step' : '') + (isStart ? ' starter-step' : '');
+  div.style.animationDelay = `${idx * 0.08}s`;
   div.setAttribute('role', 'listitem');
-
-  const label = isBindStep ? 'Finish' : trick.isStarter ? 'Opener' : `Step ${stepIndex + 1}`;
-  div.innerHTML = `
-    <p class="step-num">${label}</p>
+  const label = isBindStep ? 'Finish' : isStart ? 'Opener' : `Step ${idx + 1}`;
+  div.innerHTML = `<p class="step-num">${label}</p>
     <p class="step-name">${trick.name}</p>
-    <p class="step-level">${trick.level ?? ''}</p>
-  `;
+    <p class="step-level">${trick.level ?? ''}</p>`;
   return div;
 }
 
-/**
- * Render arrow connector between combo steps.
- * @param {number} index
- * @returns {HTMLElement}
- */
-function createArrow(index) {
-  const span = document.createElement('span');
-  span.className = 'combo-arrow';
-  span.setAttribute('aria-hidden', 'true');
-  span.style.animationDelay = `${index * 0.08}s`;
-  span.textContent = '→';
-  return span;
+function createArrow(idx) {
+  const s = document.createElement('span');
+  s.className = 'combo-arrow';
+  s.setAttribute('aria-hidden', 'true');
+  s.style.animationDelay = `${idx * 0.08}s`;
+  s.textContent = '→';
+  return s;
 }
 
-/**
- * Render the combo sequence into the combo-flow container.
- * @param {TrickDef[]} combo
- */
 function renderComboFlow(combo) {
   const flow = document.getElementById('combo-flow');
   flow.innerHTML = '';
@@ -796,148 +866,184 @@ function renderComboFlow(combo) {
   });
 }
 
-/** Handle "Generate Daily Combo Challenge". */
 function onGenerateCombo() {
-  const masteredNonBind = getMasteredTricks().filter((t) => !t.isBind);
-  const comboDisplay    = document.getElementById('combo-display');
-  const comboEmpty      = document.getElementById('combo-empty');
-  const feedback        = document.getElementById('combo-feedback');
+  const nonBind = getMasteredTricks().filter((t) => !t.isBind);
+  const display = document.getElementById('combo-display');
+  const empty   = document.getElementById('combo-empty');
+  const fb      = document.getElementById('combo-feedback');
 
-  if (masteredNonBind.length === 0) {
-    comboDisplay.classList.add('hidden');
-    comboEmpty.classList.remove('hidden');
+  if (nonBind.length === 0) {
+    display.classList.add('hidden');
+    empty.classList.remove('hidden');
     return;
   }
-
-  comboEmpty.classList.add('hidden');
-  comboDisplay.classList.remove('hidden');
-  feedback.classList.add('hidden');
-  feedback.textContent = '';
-
-  const completeBtn = document.getElementById('btn-complete');
-  completeBtn.disabled = false;
+  empty.classList.add('hidden');
+  display.classList.remove('hidden');
+  fb.classList.add('hidden');
+  fb.textContent = '';
+  document.getElementById('btn-complete').disabled = false;
   comboCompleted = false;
-
   const combo = generateCombo();
-  document.getElementById('combo-flow').dataset.comboIds =
-    combo.map((t) => t.id).join(',');
-
+  document.getElementById('combo-flow').dataset.comboIds = combo.map((t) => t.id).join(',');
   renderComboFlow(combo);
 }
 
-/** Handle "Complete Challenge". */
 function onCompleteChallenge() {
   if (comboCompleted) return;
   comboCompleted = true;
-
-  const completeBtn = document.getElementById('btn-complete');
-  completeBtn.disabled = true;
-
-  addXP(COMBO_CHALLENGE_XP);
-
-  const feedback = document.getElementById('combo-feedback');
-  feedback.textContent = `🎯 Challenge completed! +${COMBO_CHALLENGE_XP} XP earned.`;
-  feedback.className = 'mt-4 text-sm font-semibold text-neon-emerald';
-  feedback.classList.remove('hidden');
-
-  showToast(`🎯 Combo challenge complete! +${COMBO_CHALLENGE_XP} XP`, 'emerald');
+  document.getElementById('btn-complete').disabled = true;
+  addXP(COMBO_XP);
+  const fb = document.getElementById('combo-feedback');
+  fb.textContent = `🎯 Challenge completed! +${COMBO_XP} XP earned.`;
+  fb.className   = 'mt-4 text-sm font-semibold text-neon-emerald';
+  fb.classList.remove('hidden');
+  showToast(`🎯 Combo complete! +${COMBO_XP} XP`, 'emerald');
 }
 
 /* ============================================================
-   CUSTOM TRICK CREATOR — Modal form
+   CUSTOM TRICK MODAL — Add / Edit
 ============================================================ */
 
-/** Open the custom trick modal. */
 function openCustomModal() {
-  document.getElementById('custom-modal').classList.remove('hidden');
-  document.getElementById('custom-modal').setAttribute('aria-hidden', 'false');
+  const m = document.getElementById('custom-modal');
+  m.classList.remove('hidden');
+  m.setAttribute('aria-hidden', 'false');
   document.getElementById('ct-name').focus();
 }
 
-/** Close the custom trick modal and reset the form. */
 function closeCustomModal() {
-  document.getElementById('custom-modal').classList.add('hidden');
-  document.getElementById('custom-modal').setAttribute('aria-hidden', 'true');
+  const m = document.getElementById('custom-modal');
+  m.classList.add('hidden');
+  m.setAttribute('aria-hidden', 'true');
   document.getElementById('custom-trick-form').reset();
   document.getElementById('ct-error').textContent = '';
+  // Re-enable name field (might have been disabled for edit)
+  document.getElementById('ct-name').disabled = false;
+  // Reset modal title / submit label back to "add" defaults
+  document.getElementById('modal-title-text').textContent = '✨ Add Custom Trick';
+  document.getElementById('btn-modal-submit').textContent = 'Add Trick';
+  editingTrickId = null;
 }
 
 /**
- * Populate the prerequisite <select> inside the modal with all current tricks.
+ * Populate category and mount dropdowns from the shared constant arrays.
  */
-function populatePrereqSelect() {
-  const sel = document.getElementById('ct-prereqs');
-  sel.innerHTML = '';
-  TRICKS_DATA.forEach((t) => {
-    const opt = document.createElement('option');
-    opt.value = t.id;
-    opt.textContent = t.name;
-    sel.appendChild(opt);
+function populateModalDropdowns() {
+  const catSel = document.getElementById('ct-category');
+  catSel.innerHTML = CATEGORY_OPTIONS.map(
+    (c) => `<option value="${c}">${c}</option>`
+  ).join('');
+
+  ['ct-entry', 'ct-exit'].forEach((selId) => {
+    const s = document.getElementById(selId);
+    s.innerHTML = MOUNT_OPTIONS.map(
+      (m) => `<option value="${m}">${m}</option>`
+    ).join('');
   });
 }
 
 /**
- * Handle form submission: validate, create TrickDef, inject into TRICKS_DATA,
- * initialise its status in STATE, persist, and refresh the UI.
+ * Populate the prerequisite multi-select, excluding the trick being edited.
+ * @param {string|null} [excludeId]
+ */
+function populatePrereqSelect(excludeId = null) {
+  const sel = document.getElementById('ct-prereqs');
+  sel.innerHTML = '';
+  TRICKS_DATA.filter((t) => t.id !== excludeId).forEach((t) => {
+    const o = document.createElement('option');
+    o.value       = t.id;
+    o.textContent = t.name;
+    sel.appendChild(o);
+  });
+}
+
+/**
+ * Handle Add / Edit form submission.
  * @param {SubmitEvent} e
  */
 function onCustomTrickSubmit(e) {
   e.preventDefault();
-  const errorEl = document.getElementById('ct-error');
-  errorEl.textContent = '';
+  const errEl = document.getElementById('ct-error');
+  errEl.textContent = '';
 
   const name       = document.getElementById('ct-name').value.trim();
-  const category   = document.getElementById('ct-category').value.trim() || 'Custom';
+  const category   = document.getElementById('ct-category').value;
   const level      = document.getElementById('ct-level').value;
-  const entryMount = document.getElementById('ct-entry').value.trim();
-  const exitMount  = document.getElementById('ct-exit').value.trim();
+  const entryMount = document.getElementById('ct-entry').value;
+  const exitMount  = document.getElementById('ct-exit').value;
   const diffVal    = parseInt(document.getElementById('ct-difficulty').value, 10);
+  const prereqs    = Array.from(
+    document.getElementById('ct-prereqs').selectedOptions
+  ).map((o) => o.value);
 
-  // Gather selected prereqs (multi-select)
-  const prereqsSel = document.getElementById('ct-prereqs');
-  const prereqs    = Array.from(prereqsSel.selectedOptions).map((o) => o.value);
-
-  // Validation
   if (!name) {
-    errorEl.textContent = 'Trick name is required.';
+    errEl.textContent = 'Trick name is required.';
     document.getElementById('ct-name').focus();
     return;
   }
-  const duplicate = TRICKS_DATA.find(
-    (t) => t.name.toLowerCase() === name.toLowerCase()
-  );
-  if (duplicate) {
-    errorEl.textContent = `A trick named "${name}" already exists.`;
+
+  /* ── EDIT MODE ── */
+  if (editingTrickId) {
+    const idx = TRICKS_DATA.findIndex((t) => t.id === editingTrickId);
+    if (idx === -1) { errEl.textContent = 'Trick not found.'; return; }
+
+    // Check name collision (allow keeping the same name)
+    const collision = TRICKS_DATA.find(
+      (t) => t.id !== editingTrickId && t.name.toLowerCase() === name.toLowerCase()
+    );
+    if (collision) { errEl.textContent = `A trick named "${name}" already exists.`; return; }
+
+    const existing = TRICKS_DATA[idx];
+    const updated  = {
+      ...existing,
+      name,
+      category,
+      level,
+      entryMount,
+      exitMount,
+      difficulty: isNaN(diffVal) ? existing.difficulty : Math.max(1, Math.min(5, diffVal)),
+      prereqs,
+      xpReward:   level === 'Advanced' ? 150 : level === 'Intermediate' ? 100 : 60,
+    };
+    TRICKS_DATA[idx] = updated;
+
+    // Sync custom tricks in localStorage if it's a custom trick
+    if (updated.isCustom) {
+      const customs = loadCustomTricks().map((t) => t.id === editingTrickId ? updated : t);
+      persistCustomTricks(customs);
+    }
+    // Recompute statuses in case prereqs changed
+    recomputeAllStatuses();
+    persistState();
+    renderSkillTree();
+    closeCustomModal();
+    showToast(`✏️ "${updated.name}" updated!`, 'violet');
     return;
   }
+
+  /* ── ADD MODE ── */
+  const duplicate = TRICKS_DATA.find((t) => t.name.toLowerCase() === name.toLowerCase());
+  if (duplicate) { errEl.textContent = `A trick named "${name}" already exists.`; return; }
 
   /** @type {TrickDef} */
   const newTrick = {
     id:          slugify(name),
-    name,
-    category,
-    level,
+    name, category, level, prereqs,
     difficulty:  isNaN(diffVal) ? 2 : Math.max(1, Math.min(5, diffVal)),
-    prereqs,
     xpReward:    level === 'Advanced' ? 150 : level === 'Intermediate' ? 100 : 60,
     isStarter:   false,
     isBind:      false,
-    entryMount,
-    exitMount,
+    entryMount, exitMount,
     youtube_url: '',
     isCustom:    true,
   };
 
-  // Inject into the live TRICKS_DATA array
   TRICKS_DATA.push(newTrick);
-
-  // Initialise status in STATE
   STATE.tricks[newTrick.id] = computeStatus(newTrick);
 
-  // Persist custom tricks separately
-  const existing = loadCustomTricks();
-  existing.push(newTrick);
-  persistCustomTricks(existing);
+  const customs = loadCustomTricks();
+  customs.push(newTrick);
+  persistCustomTricks(customs);
   persistState();
 
   renderSkillTree();
@@ -946,114 +1052,88 @@ function onCustomTrickSubmit(e) {
 }
 
 /* ============================================================
-   TABS — Navigation
+   TABS
 ============================================================ */
 
-/**
- * Switch the visible view section.
- * @param {'skilltree'|'combo'} viewId
- */
 function switchTab(viewId) {
   document.querySelectorAll('.view-section').forEach((v) => v.classList.add('hidden'));
   const active = document.getElementById(`view-${viewId}`);
   if (active) active.classList.remove('hidden');
-
   document.querySelectorAll('.tab-btn').forEach((t) => {
-    const isActive = t.id === `tab-${viewId}`;
-    t.classList.toggle('active-tab', isActive);
-    t.setAttribute('aria-selected', String(isActive));
+    const on = t.id === `tab-${viewId}`;
+    t.classList.toggle('active-tab', on);
+    t.setAttribute('aria-selected', String(on));
   });
 }
 
 /* ============================================================
-   INIT — Bootstrap
+   INIT
 ============================================================ */
 
-/**
- * Merge built-in tricks with saved custom tricks into TRICKS_DATA.
- */
 function buildTricksData() {
-  const customs = loadCustomTricks();
-  TRICKS_DATA = [...BUILTIN_TRICKS, ...customs];
+  TRICKS_DATA = [...BUILTIN_TRICKS, ...loadCustomTricks()];
 }
 
-/**
- * Initialise STATE from localStorage or from scratch.
- */
 function initState() {
   buildTricksData();
-
   const saved = loadPersistedState();
   if (saved) {
-    // Restore XP and level
-    STATE.xp    = saved.xp    ?? 0;
-    STATE.level = saved.level ?? 1;
-
-    // Restore trick statuses; ensure any NEW built-in tricks not in saved data get defaults
+    STATE.xp     = saved.xp    ?? 0;
+    STATE.level  = saved.level ?? 1;
     STATE.tricks = saved.tricks ?? {};
-    TRICKS_DATA.forEach((trick) => {
-      if (!(trick.id in STATE.tricks)) {
-        STATE.tricks[trick.id] = computeStatus(trick);
-      }
+    // Seed status for any new tricks not in saved state
+    TRICKS_DATA.forEach((t) => {
+      if (!(t.id in STATE.tricks)) STATE.tricks[t.id] = computeStatus(t);
     });
-    // Re-run full status computation to fix any inconsistencies
     recomputeAllStatuses();
   } else {
-    // Fresh start: tricks with no prereqs start unlocked
-    TRICKS_DATA.forEach((trick) => {
-      STATE.tricks[trick.id] = trick.prereqs.length === 0 ? 'unlocked' : 'locked';
+    TRICKS_DATA.forEach((t) => {
+      STATE.tricks[t.id] = t.prereqs.length === 0 ? 'unlocked' : 'locked';
     });
   }
 }
 
-/**
- * Bind all static event listeners.
- */
 function bindEvents() {
-  // Tabs
-  document.getElementById('tab-skilltree')
-    .addEventListener('click', () => switchTab('skilltree'));
-  document.getElementById('tab-combo')
-    .addEventListener('click', () => switchTab('combo'));
+  /* Tabs */
+  document.getElementById('tab-skilltree').addEventListener('click', () => switchTab('skilltree'));
+  document.getElementById('tab-combo').addEventListener('click',     () => switchTab('combo'));
 
-  // Combo
-  document.getElementById('btn-generate')
-    .addEventListener('click', onGenerateCombo);
-  document.getElementById('btn-complete')
-    .addEventListener('click', onCompleteChallenge);
+  /* Combo */
+  document.getElementById('btn-generate').addEventListener('click', onGenerateCombo);
+  document.getElementById('btn-complete').addEventListener('click', onCompleteChallenge);
 
-  // Custom trick modal — open button in skill tree header
-  document.getElementById('btn-add-trick')
-    .addEventListener('click', () => {
-      populatePrereqSelect();
-      openCustomModal();
-    });
-
-  // Modal close buttons
-  document.getElementById('btn-modal-close')
-    .addEventListener('click', closeCustomModal);
-  document.getElementById('btn-modal-cancel')
-    .addEventListener('click', closeCustomModal);
-
-  // Close modal on backdrop click
-  document.getElementById('custom-modal')
-    .addEventListener('click', (e) => {
-      if (e.target === document.getElementById('custom-modal')) closeCustomModal();
-    });
-
-  // Close on Escape key
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeCustomModal();
+  /* Custom trick — open Add modal */
+  document.getElementById('btn-add-trick').addEventListener('click', () => {
+    editingTrickId = null;
+    populateModalDropdowns();
+    populatePrereqSelect(null);
+    document.getElementById('modal-title-text').textContent = '✨ Add Custom Trick';
+    document.getElementById('btn-modal-submit').textContent = 'Add Trick';
+    openCustomModal();
   });
 
-  // Form submit
-  document.getElementById('custom-trick-form')
-    .addEventListener('submit', onCustomTrickSubmit);
+  /* Modal close/cancel */
+  document.getElementById('btn-modal-close').addEventListener('click',  closeCustomModal);
+  document.getElementById('btn-modal-cancel').addEventListener('click', closeCustomModal);
+  document.getElementById('custom-modal').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('custom-modal')) closeCustomModal();
+  });
+
+  /* Confirm modal cancel */
+  document.getElementById('cm-cancel').addEventListener('click', closeConfirmModal);
+  document.getElementById('confirm-modal').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('confirm-modal')) closeConfirmModal();
+  });
+
+  /* Form submit */
+  document.getElementById('custom-trick-form').addEventListener('submit', onCustomTrickSubmit);
+
+  /* Keyboard: Escape closes any open modal */
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { closeCustomModal(); closeConfirmModal(); }
+  });
 }
 
-/**
- * Application entry point.
- */
 function init() {
   initState();
   bindEvents();

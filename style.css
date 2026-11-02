@@ -288,6 +288,54 @@ html { scroll-behavior: smooth; }
 }
 .level-up-flash { animation: levelUpFlash 0.8s ease; }
 
+/* ── Card action icon buttons (Edit / Delete) ─────────── */
+.card-actions {
+  border-top: 1px solid rgba(63, 63, 70, 0.35);
+  padding-top: 0.4rem;
+  margin-top: 0.1rem;
+}
+.card-icon-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0.4rem;
+  padding: 0.2rem 0.45rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  line-height: 1;
+}
+.card-icon-btn:hover { transform: scale(1.12); }
+.edit-btn:hover {
+  background: rgba(139, 92, 246, 0.18);
+  border-color: rgba(139, 92, 246, 0.4);
+}
+.delete-btn:hover {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+/* ── Confirm / Alert modal buttons ────────────────────── */
+.cm-btn {
+  padding: 0.45rem 1.1rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.cm-btn:hover { opacity: 0.88; transform: translateY(-1px); }
+.cm-btn-violet {
+  background: linear-gradient(135deg, var(--neon-violet), #6D28D9);
+  color: #fff;
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.3);
+}
+.cm-btn-danger {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: #fff;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.3);
+}
+
 /* ── Combo step: starter variant ──────────────────────── */
 .combo-step.starter-step {
   background: rgba(26, 20, 44, 0.9);
